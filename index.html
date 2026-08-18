@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>SCAPE AHN!</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #0d0710;
+    overflow: hidden;
+    /* Stop mobile browsers from hijacking taps/swipes for scroll & zoom */
+    touch-action: none;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  }
+  #game { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+  canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
+</style>
+</head>
+<body>
+<!--DEBUG_OVERLAY--><script>
+window.addEventListener('error', e => {
+  document.title = 'JSERR: ' + e.message;
+  const p = document.createElement('pre');
+  p.style.cssText='position:fixed;top:0;left:0;z-index:99;color:#fff;background:#900;font:12px monospace;padding:8px;white-space:pre-wrap';
+  p.textContent = 'ERROR: '+e.message+'\n'+e.filename+':'+e.lineno+':'+e.colno+'\n'+(e.error&&e.error.stack||'');
+  document.body.appendChild(p);
+});
+</script>
+<!--/DEBUG_OVERLAY-->
+  <div id="game"></div>
+
+  <!-- Phaser 3 via CDN. No bundler, no npm: just open index.html (or serve the folder). -->
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+
+  <!-- Load order matters: constants -> helpers -> entities -> scenes -> boot. -->
+  <script src="js/config.js"></script>
+  <script src="js/art.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/entities/Backdrop.js"></script>
+  <script src="js/entities/Player.js"></script>
+  <script src="js/entities/Ahn.js"></script>
+  <script src="js/entities/Obstacles.js"></script>
+  <script src="js/scenes/BootScene.js"></script>
+  <script src="js/scenes/GameScene.js"></script>
+  <script src="js/scenes/GameOverScene.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
