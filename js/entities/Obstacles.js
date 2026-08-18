@@ -177,6 +177,11 @@ class IdolDancer extends Obstacle {
  *                           unfair, so idols never appear inside a cluster.
  * ===================================================================== */
 class ObstacleSpawner {
+  /** Ground distance covered by one full jump arc at `speed` px/s. */
+  static jumpArcPx(speed) {
+    return (2 * Math.abs(PLAYER.JUMP_VELOCITY) / GAME.GRAVITY) * speed;
+  }
+
   constructor(scene, group) {
     this.scene = scene;
     this.group = group;
@@ -211,14 +216,19 @@ class ObstacleSpawner {
       Phaser.Math.Linear(DIFFICULTY.CLUSTER_CHANCE_START, DIFFICULTY.CLUSTER_CHANCE_END, intensity);
     if (type !== 'idol' && Math.random() < clusterChance) {
       const second = Math.random() < 0.5 ? 'kimchi' : 'spike';
-      this.spawnOne(second, spawnX + DIFFICULTY.CLUSTER_GAP, speed);
-      clusterExtra = DIFFICULTY.CLUSTER_GAP;  // the pair must be cleared as one unit
+      const inner = Phaser.Math.Clamp(
+        ObstacleSpawner.jumpArcPx(speed) * DIFFICULTY.CLUSTER_GAP_ARC_FRAC,
+        DIFFICULTY.CLUSTER_GAP_MIN, DIFFICULTY.CLUSTER_GAP_MAX);
+      this.spawnOne(second, spawnX + inner, speed);
+      clusterExtra = inner;                   // the pair must be cleared as one unit
     }
 
     // --- roll the gap to the NEXT spawn ---------------------------------
     const base = Phaser.Math.Linear(DIFFICULTY.GAP_START, DIFFICULTY.GAP_END, intensity);
     const jitter = Math.random() * DIFFICULTY.GAP_JITTER;
-    this.nextGap = Math.max(DIFFICULTY.GAP_MIN_ABS, base + jitter) + clusterExtra;
+    const floor = Math.max(DIFFICULTY.GAP_MIN_ABS,
+                           ObstacleSpawner.jumpArcPx(speed) * DIFFICULTY.GAP_MIN_ARC_FRAC);
+    this.nextGap = Math.max(floor, base + jitter) + clusterExtra;
     this.lastType = type;
   }
 

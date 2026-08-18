@@ -17,30 +17,30 @@ class GameOverScene extends Phaser.Scene {
     this.add.rectangle(0, 0, GAME.WIDTH, GAME.HEIGHT, 0x0d0710, 0.72).setOrigin(0, 0);
 
     const panel = this.add.container(cx, GAME.HEIGHT / 2 + 10);
-    const bg = this.add.rectangle(0, 0, 460, 300, 0x1a1024, 0.98).setStrokeStyle(4, 0x8f0f22);
+    const bg = this.add.rectangle(0, 0, 460, 336, 0x1a1024, 0.98).setStrokeStyle(4, 0x8f0f22);
     panel.add(bg);
 
-    panel.add(this.add.text(0, -116, 'AHN GOT YOU!', {
+    panel.add(this.add.text(0, -132, 'AHN GOT YOU!', {
       fontFamily: F, fontSize: '46px', color: PAL.uiAccent, stroke: '#2b0d1c', strokeThickness: 8,
     }).setOrigin(0.5));
 
-    panel.add(this.add.text(0, -58, 'SCORE', {
+    panel.add(this.add.text(0, -72, 'SCORE', {
       fontFamily: F, fontSize: '18px', color: '#d9c3e8',
     }).setOrigin(0.5));
-    panel.add(this.add.text(0, -26, String(data.score), {
+    panel.add(this.add.text(0, -40, String(data.score), {
       fontFamily: F, fontSize: '58px', color: '#ffffff', stroke: '#2b0d1c', strokeThickness: 6,
     }).setOrigin(0.5));
 
-    panel.add(this.add.text(0, 26, (data.isNewBest ? 'NEW BEST!  ' : 'BEST  ') + data.best, {
+    panel.add(this.add.text(0, 14, (data.isNewBest ? 'NEW BEST!  ' : 'BEST  ') + data.best, {
       fontFamily: F, fontSize: '24px', color: data.isNewBest ? PAL.uiWarn : '#d9c3e8',
     }).setOrigin(0.5));
 
-    panel.add(this.add.text(0, 58, Math.floor(data.distance) + ' m survived', {
+    panel.add(this.add.text(0, 46, data.distance + ' m survived', {
       fontFamily: F, fontSize: '16px', color: '#9d86ad',
     }).setOrigin(0.5));
 
     // --- restart button -------------------------------------------------
-    const btn = this.add.text(0, 112, 'RUN AGAIN', {
+    const btn = this.add.text(0, 104, 'RUN AGAIN', {
       fontFamily: F, fontSize: '28px', color: '#ffffff',
       backgroundColor: '#8f0f22', padding: { x: 26, y: 12 },
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });

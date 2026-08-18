@@ -34,6 +34,38 @@ const PlaceholderArt = (function () {
   }
 
   /**
+   * Add a 1px dark keyline around the opaque pixels of every frame.
+   * Flat placeholder shapes disappear against a busy background; an outline
+   * is what makes them read as game objects. Neighbour lookups are clamped to
+   * each frame's own rect so the outline can never bleed into the next frame.
+   */
+  function outlineFrames(tex, fw, fh, count, color) {
+    const ctx = tex.getContext();
+    const img = ctx.getImageData(0, 0, fw * count, fh);
+    const d = img.data;
+    const W = fw * count;
+    const at = (x, y) => d[(y * W + x) * 4 + 3];
+    const rgb = [parseInt(color.slice(1, 3), 16), parseInt(color.slice(3, 5), 16),
+                 parseInt(color.slice(5, 7), 16)];
+    const writes = [];
+    for (let f = 0; f < count; f++) {
+      const x0 = f * fw, x1 = x0 + fw - 1;
+      for (let y = 0; y < fh; y++) {
+        for (let x = x0; x <= x1; x++) {
+          if (at(x, y) > 8) continue;                       // already opaque
+          const near =
+            (x > x0 && at(x - 1, y) > 128) || (x < x1 && at(x + 1, y) > 128) ||
+            (y > 0 && at(x, y - 1) > 128) || (y < fh - 1 && at(x, y + 1) > 128);
+          if (near) writes.push((y * W + x) * 4);
+        }
+      }
+    }
+    writes.forEach((i) => { d[i] = rgb[0]; d[i + 1] = rgb[1]; d[i + 2] = rgb[2]; d[i + 3] = 255; });
+    ctx.putImageData(img, 0, 0);
+    tex.refresh();
+  }
+
+  /**
    * Build one horizontal strip texture and register `count` frames on it,
    * named 0..count-1 (identical to a loaded spritesheet's frame names).
    */
@@ -294,13 +326,14 @@ const PlaceholderArt = (function () {
       const a = ASSETS[name];
       if (a.path) return;                       // loaded by BootScene instead
       const draw = DRAWERS[name];
-      strip(scene, a.key, a.frameWidth, a.frameHeight, a.frameCount, (ctx, i, fw, fh) => {
+      const tex = strip(scene, a.key, a.frameWidth, a.frameHeight, a.frameCount, (ctx, i, fw, fh) => {
         // Real art first; fall back to the placeholder drawing per frame, so a
         // half-supplied character still produces a complete sheet.
         if (a.compose && drawComposed(scene, a, ctx, i, fw, fh)) return;
         if (draw) draw(ctx, i, fw, fh);
         else console.warn('[art] no placeholder drawer for', name, 'frame', i);
       }, a.artScale || 1);
+      if (a.outline) outlineFrames(tex, a.frameWidth, a.frameHeight, a.frameCount, a.outline);
     });
   }
 

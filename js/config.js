@@ -71,7 +71,10 @@ const PLAYER = {
  * ------------------------------------------------------------------- */
 const AHN = {
   X_FAR: 46,              // Furthest back (mostly off the left edge) = you're doing great.
-  X_NEAR: 170,            // Closest he creeps during normal play = breathing down your neck.
+  X_NEAR: 120,            // Closest he creeps during normal play = breathing down your neck.
+  X_MAX: 168,             // Hard clamp. Hit pressure stacks, and without this
+                          // he would walk straight through the girl and out the
+                          // right of the screen after a few hits.
   X_LUNGE: 200,           // Where he snaps to during the game-over catch.
   FOLLOW_LERP: 0.9,       // How fast he eases to his target X (per second, 0..1-ish).
   HIT_PUSH: 46,           // Px closer per hit taken. Persistent pressure.
@@ -79,6 +82,7 @@ const AHN = {
   CREDIT_MAX: 70,         // Cap on accumulated near-miss credit.
   CREDIT_DECAY: 6,        // Px/second the credit bleeds away.
   Y_OFFSET: 2,            // Fine-tune his feet against the ground line.
+  WARN_X: 148,            // Screen X past which the "AHN IS CLOSE!" warning shows.
 
   // Comedic trip gag: only fires when the player has genuinely pulled ahead.
   TRIP_WHEN_X_BELOW: 40,  // He must be at least this far back to trip (i.e. you earned it).
@@ -105,15 +109,26 @@ const DIFFICULTY = {
   GAP_START: 820,         // Comfy spacing at intensity 0.
   GAP_END: 620,           // Tightest spacing at intensity 1.
   GAP_JITTER: 210,        // Random extra gap so the rhythm never feels metronomic.
-  // Hard floor, and the most important fairness number in the file: a jump
-  // lasts ~0.78s, which is ~700px of ground at top speed. Gaps below that
-  // must still be clearable in a single arc, so do not drop this much.
-  GAP_MIN_ABS: 520,
+  // Hard floor in absolute px...
+  GAP_MIN_ABS: 480,
+  // ...and a second floor expressed as a fraction of the CURRENT jump arc.
+  // A jump covers `arc = 2*|JUMP_VELOCITY|/GRAVITY * speed` px of ground, so
+  // the arc grows as the game speeds up. Spacing obstacles at least this
+  // fraction of an arc apart guarantees she can always land before the next
+  // one instead of being dropped straight onto it. The spawner takes
+  // whichever of the two floors is larger.
+  GAP_MIN_ARC_FRAC: 0.85,
 
   // Chance a spawn becomes a 2-obstacle cluster (ramps in with intensity).
   CLUSTER_CHANCE_START: 0.0,
   CLUSTER_CHANCE_END: 0.30,
-  CLUSTER_GAP: 300,       // Inner spacing of a cluster (px).
+  // Inner spacing of a cluster, also derived from the jump arc: a cluster is
+  // meant to be cleared by ONE jump, so the pair must fit comfortably inside a
+  // single arc at whatever speed it spawns at. A fixed px value cannot do this
+  // -- it is either trivial when slow or unclearable when fast.
+  CLUSTER_GAP_ARC_FRAC: 0.32,
+  CLUSTER_GAP_MIN: 140,
+  CLUSTER_GAP_MAX: 300,
   CLUSTER_MIN_INTENSITY: 0.25, // No clusters before this much of the ramp.
 };
 
@@ -173,6 +188,7 @@ const SCORE = {
   MULT_MAX: 4.0,
   MULT_DECAY_DELAY: 2600, // ms of no near misses before the multiplier bleeds.
   MULT_DECAY_RATE: 0.55,  // Multiplier lost per second once decaying.
+  PX_PER_METRE: 40,       // Purely cosmetic: world px -> the 'm survived' readout.
   BEST_KEY: 'scapeahn.best',
 };
 
@@ -256,18 +272,21 @@ const ASSETS = {
     key: 'kimchi',
     path: null,
     frameWidth: 72, frameHeight: 72, frameCount: 2, artScale: 2,
+    outline: '#150c1c',   // keyline: flat shapes vanish against the neon street
     anims: { 'kimchi-idle': { frames: [0, 1], frameRate: 6, repeat: -1 } },
   },
   spike: {
     key: 'spike',
     path: null,
     frameWidth: 96, frameHeight: 48, frameCount: 2, artScale: 2,
+    outline: '#150c1c',   // keyline: flat shapes vanish against the neon street
     anims: { 'spike-idle': { frames: [0, 1], frameRate: 4, repeat: -1 } },
   },
   idol: {
     key: 'idol',
     path: null,
     frameWidth: 80, frameHeight: 96, frameCount: 4, artScale: 2,
+    outline: '#150c1c',   // keyline: flat shapes vanish against the neon street
     anims: {
       'idol-dance':     { frames: [0, 1], frameRate: 9, repeat: -1 },
       'idol-pose-high': { frames: [2],    frameRate: 1, repeat: 0 },

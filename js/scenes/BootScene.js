@@ -66,7 +66,7 @@ class BootScene extends Phaser.Scene {
       });
     });
 
-    Sfx.init(this);
+    Sfx.init();          // starts background fetch/decode; never blocks
     this.scene.start(DEV.has('skip') ? 'Game' : 'Title');
   }
 }
@@ -89,31 +89,37 @@ class TitleScene extends Phaser.Scene {
       .setOrigin(0.5, 1).setDepth(15).play('ahn-run');
     this.tweens.add({ targets: ahn, y: GAME.GROUND_Y - 5, duration: 420, yoyo: true, repeat: -1 });
 
+    // Scrims: the street art is gorgeous and completely illegible behind text.
+    // Everything from here up must also sit above the backdrop's near layer
+    // (depth 2), or the bottom half of the UI disappears under the pavement.
+    this.add.rectangle(0, 40, GAME.WIDTH, 180, 0x0d0710, 0.62).setOrigin(0, 0).setDepth(40);
+    this.add.rectangle(0, 404, GAME.WIDTH, 136, 0x0d0710, 0.62).setOrigin(0, 0).setDepth(40);
+
     this.add.text(GAME.WIDTH / 2, 86, 'SCAPE AHN!', {
       fontFamily: 'Trebuchet MS, sans-serif', fontSize: '78px', color: PAL.uiAccent,
       stroke: '#2b0d1c', strokeThickness: 10,
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setDepth(50);
 
     this.add.text(GAME.WIDTH / 2, 150, 'the evil candy man is right behind you', {
       fontFamily: 'Trebuchet MS, sans-serif', fontSize: '20px', color: '#d9c3e8',
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setDepth(50);
 
     const best = Number(localStorage.getItem(SCORE.BEST_KEY) || 0);
     if (best > 0) {
       this.add.text(GAME.WIDTH / 2, 184, 'BEST  ' + best, {
         fontFamily: 'Trebuchet MS, sans-serif', fontSize: '22px', color: PAL.uiWarn,
-      }).setOrigin(0.5);
+      }).setOrigin(0.5).setDepth(50);
     }
 
-    const prompt = this.add.text(GAME.WIDTH / 2, 470,
+    const prompt = this.add.text(GAME.WIDTH / 2, 432,
       'SPACE / UP / TAP  to jump      DOWN / SWIPE DOWN  to duck', {
         fontFamily: 'Trebuchet MS, sans-serif', fontSize: '18px', color: '#ffffff',
-      }).setOrigin(0.5);
+      }).setOrigin(0.5).setDepth(50);
 
-    const start = this.add.text(GAME.WIDTH / 2, 508, 'PRESS  SPACE  OR  TAP  TO  RUN', {
+    const start = this.add.text(GAME.WIDTH / 2, 486, 'PRESS  SPACE  OR  TAP  TO  RUN', {
       fontFamily: 'Trebuchet MS, sans-serif', fontSize: '26px', color: '#ffffff',
       backgroundColor: '#8f0f22', padding: { x: 18, y: 10 },
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setDepth(50);
     this.tweens.add({ targets: start, alpha: 0.35, duration: 620, yoyo: true, repeat: -1 });
     prompt.setAlpha(0.85);
 

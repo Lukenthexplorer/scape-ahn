@@ -20,16 +20,6 @@
 </style>
 </head>
 <body>
-<!--DEBUG_OVERLAY--><script>
-window.addEventListener('error', e => {
-  document.title = 'JSERR: ' + e.message;
-  const p = document.createElement('pre');
-  p.style.cssText='position:fixed;top:0;left:0;z-index:99;color:#fff;background:#900;font:12px monospace;padding:8px;white-space:pre-wrap';
-  p.textContent = 'ERROR: '+e.message+'\n'+e.filename+':'+e.lineno+':'+e.colno+'\n'+(e.error&&e.error.stack||'');
-  document.body.appendChild(p);
-});
-</script>
-<!--/DEBUG_OVERLAY-->
   <div id="game"></div>
 
   <!-- Phaser 3 via CDN. No bundler, no npm: just open index.html (or serve the folder). -->

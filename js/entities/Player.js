@@ -144,13 +144,15 @@ class Player extends Phaser.Physics.Arcade.Sprite {
     const extraG = (!grounded && this.isDucking) ? GAME.GRAVITY * (PLAYER.DUCK_FAST_FALL - 1) : 0;
     this.body.setGravityY(extraG);
 
-    // Pick the pose.
-    if (this.hurtUntil && now < this.hurtUntil) {
-      this.setState_('hurt');
-    } else if (!grounded) {
+    // Pick the pose. Airborne and ducking come FIRST: those two states own the
+    // hitbox, and the sprite must never disagree with the box you can be hit
+    // in. Getting hurt is communicated by the flashing instead.
+    if (!grounded) {
       this.setState_(this.body.velocity.y < 0 ? 'jump' : 'fall');
     } else if (this.isDucking) {
       this.setState_('duck');
+    } else if (this.hurtUntil && now < this.hurtUntil) {
+      this.setState_('hurt');
     } else {
       this.setState_('run');
     }

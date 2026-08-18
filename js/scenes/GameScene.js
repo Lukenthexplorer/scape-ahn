@@ -99,6 +99,7 @@ class GameScene extends Phaser.Scene {
       }
     }
 
+    this.warnShown = false;
     this.warnText = this.add.text(GAME.WIDTH / 2, 34, '', {
       fontFamily: F, fontSize: '24px', color: '#ff5c7a', stroke: '#2b0d1c', strokeThickness: 5,
     }).setOrigin(0.5, 0).setDepth(100).setAlpha(0);
@@ -149,18 +150,17 @@ class GameScene extends Phaser.Scene {
       if (!t.active || t.swiped || !p.isDown) return;
       const dy = p.y - t.downY;
       if (dy > TOUCH.SWIPE_DOWN_PX) {
-        t.swiped = true;
+        t.swiped = true;                 // consumed by updateDuck() each frame
         // Undo the jump this gesture started, if it is still fresh.
         if ((this.time.now - t.downAt) <= TOUCH.SWIPE_MAX_MS && this.player.body.velocity.y < 0) {
           this.player.body.setVelocityY(0);
         }
-        this.player.setDuck(true);
       }
     });
 
     const endTouch = () => {
       this.touch.active = false;
-      if (this.touch.swiped) this.player.setDuck(false);
+      this.touch.swiped = false;         // lifting the finger stands her back up
       this.player.releaseJump();
     };
     this.input.on('pointerup', endTouch);
@@ -177,6 +177,13 @@ class GameScene extends Phaser.Scene {
       this.game.events.off(Phaser.Core.Events.BLUR, this.onBlur);
       this.game.events.off(Phaser.Core.Events.FOCUS, this.onFocus);
     });
+  }
+
+  /** Duck is a held state, so it is polled every frame from both input paths. */
+  updateDuck() {
+    const held = this.keys.down.isDown || this.keys.s.isDown ||
+                 (this.touch.active && this.touch.swiped);
+    this.player.setDuck(held);
   }
 
   togglePause() {
@@ -211,7 +218,9 @@ class GameScene extends Phaser.Scene {
       /* --- 3. SPAWN + MOVE OBSTACLES -------------------------------- */
       this.spawner.update(dDist, this.intensity, this.speed);
 
-      this.obstacles.getChildren().forEach((o) => {
+      // slice(): destroy() mutates the group's child list, and mutating it
+      // mid-iteration silently skips the next obstacle.
+      this.obstacles.getChildren().slice().forEach((o) => {
         o.tickMotion(this.speed, dt);
         if (o.trackNearMiss(this.player)) this.awardNearMiss(o);
         if (o.x < -140) o.destroy();          // recycle off the left edge
@@ -228,6 +237,7 @@ class GameScene extends Phaser.Scene {
       this.player.anims.timeScale = 0.85 + 0.75 * this.intensity;
       this.ahn.anims.timeScale = 0.9 + 0.6 * this.intensity;
 
+      this.updateDuck();
       this.player.tick();
       this.ahn.tick(dt, this.intensity, this.hits);
 
@@ -246,13 +256,15 @@ class GameScene extends Phaser.Scene {
       this.multText.setAlpha(0);
     }
 
-    // "HE'S CLOSE!" nudge once AHN is breathing down her neck.
-    const close = this.ahn.x > AHN.X_NEAR * 0.72;
-    if (close && this.warnText.alpha < 1) {
+    // "AHN IS CLOSE!" nudge once he is breathing down her neck. Tracked with a
+    // flag, not with alpha: testing alpha restarts the fade every frame while
+    // it is still fading, stacking a new tween per frame.
+    const close = this.ahn.x > AHN.WARN_X;
+    if (close !== this.warnShown) {
+      this.warnShown = close;
       this.warnText.setText('AHN IS CLOSE!');
-      this.tweens.add({ targets: this.warnText, alpha: 1, duration: 200 });
-    } else if (!close && this.warnText.alpha > 0) {
-      this.tweens.add({ targets: this.warnText, alpha: 0, duration: 300 });
+      this.tweens.killTweensOf(this.warnText);
+      this.tweens.add({ targets: this.warnText, alpha: close ? 1 : 0, duration: close ? 200 : 300 });
     }
   }
 
@@ -260,14 +272,16 @@ class GameScene extends Phaser.Scene {
    * NEAR MISS  --  the risk/reward hook
    * ================================================================== */
   awardNearMiss(obstacle) {
-    this.score += SCORE.NEAR_MISS_BONUS * this.multiplier;
+    // Bonus is scored at the multiplier you HAD when you took the risk; the
+    // step up applies to everything after. The popup shows that same number.
+    const bonus = Math.round(SCORE.NEAR_MISS_BONUS * this.multiplier);
+    this.score += bonus;
     this.multiplier = Math.min(SCORE.MULT_MAX, this.multiplier + SCORE.MULT_STEP);
     this.lastNearMissAt = this.time.now;
     this.ahn.addCredit(AHN.NEARMISS_CREDIT);   // slick play literally pushes AHN back
     Sfx.play('nearmiss');
 
-    const pop = this.add.text(this.player.x + 30, this.player.y - 70, 'NEAR MISS +' +
-      Math.round(SCORE.NEAR_MISS_BONUS * this.multiplier), {
+    const pop = this.add.text(this.player.x + 30, this.player.y - 70, 'NEAR MISS +' + bonus, {
         fontFamily: 'Trebuchet MS, sans-serif', fontSize: '18px', color: PAL.uiWarn,
         stroke: '#2b0d1c', strokeThickness: 4,
       }).setOrigin(0.5).setDepth(100);
@@ -282,9 +296,13 @@ class GameScene extends Phaser.Scene {
    * ================================================================== */
   onObstacleHit(player, obstacle) {
     if (this.isOver || obstacle.hitAlready) return;
+
+    // Mark it resolved BEFORE the mercy check. Otherwise an obstacle you walk
+    // straight through while invulnerable stays unresolved and later scores a
+    // near miss for a gap of zero -- free points for being hit.
+    obstacle.hitAlready = true;
     if (!player.takeHit()) return;             // mercy invulnerability swallowed it
 
-    obstacle.hitAlready = true;
     this.hits += 1;
     this.lives -= 1;
     this.multiplier = 1;                        // combo wiped
@@ -337,7 +355,7 @@ class GameScene extends Phaser.Scene {
           score: finalScore,
           best: Math.max(best, finalScore),
           isNewBest,
-          distance: Math.floor(this.distance),
+          distance: Math.floor(this.distance / SCORE.PX_PER_METRE),
         });
         this.scene.pause();
       });

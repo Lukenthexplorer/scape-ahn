@@ -53,7 +53,7 @@ class Ahn extends Phaser.GameObjects.Sprite {
     this.credit = Math.max(0, this.credit - AHN.CREDIT_DECAY * dt);
 
     const base = Phaser.Math.Linear(AHN.X_FAR, AHN.X_NEAR, intensity);
-    this.targetX = base + hits * AHN.HIT_PUSH - this.credit;
+    this.targetX = Math.min(AHN.X_MAX, base + hits * AHN.HIT_PUSH - this.credit);
 
     // Exponential ease toward the target -- frame-rate independent.
     const t = 1 - Math.pow(1 - AHN.FOLLOW_LERP, dt);
