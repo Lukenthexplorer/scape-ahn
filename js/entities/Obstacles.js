@@ -232,30 +232,99 @@ class ObstacleSpawner {
     return (2 * Math.abs(PLAYER.JUMP_VELOCITY) / GAME.GRAVITY) * speed;
   }
 
+  /** Peak height of a jump, in px. */
+  static jumpApexPx() {
+    return (PLAYER.JUMP_VELOCITY * PLAYER.JUMP_VELOCITY) / (2 * GAME.GRAVITY);
+  }
+
   /**
-   * Boot-time sanity check on the authored patterns. Logs, never throws:
+   * How far into the jump (0..1 of the arc) you first clear a `h` px obstacle.
+   * The arc is a parabola of height A, so height(f) = 4*A*f*(1-f); solving for
+   * height = h gives the first crossing. Returns null if the jump is simply
+   * not tall enough to clear it at all.
+   */
+  static clearFraction(h) {
+    const A = ObstacleSpawner.jumpApexPx();
+    if (h >= A) return null;
+    return 0.5 - 0.5 * Math.sqrt(1 - h / A);
+  }
+
+  /** Hitbox height/width of a pattern item type, in px. */
+  static itemSize(type) {
+    if (type === 'kimchi') return OBSTACLES.KIMCHI.body;
+    if (type === 'spike') return OBSTACLES.SPIKE.body;
+    if (type === 'idol-low') return OBSTACLES.IDOL.bodyLow;
+    if (type === 'idol-high') return OBSTACLES.IDOL.bodyHigh;
+    return OBSTACLES.IDOL.bodyLow;   // plain 'idol' may roll either way
+  }
+
+  /**
+   * Boot-time fairness check on the authored patterns. Logs, never throws:
    * a bad pattern should be loud while you tune, not fatal.
+   *
+   * The interesting case is the DOUBLE -- two ground obstacles meant to be
+   * cleared in one jump. Whether that works is NOT a question of arc length,
+   * which was the original (wrong) rule here. It is a question of apex: you
+   * must already be above the first obstacle when you reach it, and still
+   * above the second when you leave it, and the jump is a parabola, so both
+   * ends of the arc are low. That leaves a window of valid take-off points:
+   *
+   *     window = (1 - clear(h2)) - w2 - gap - clear(h1)
+   *
+   * measured in arcs. A double whose window is tiny is technically possible
+   * and miserable to play, which is exactly the failure this catches --
+   * instrumented runs showed the player landing on top of the second
+   * obstacle even though the pair fit inside one arc.
+   *
+   * Widths are evaluated at the SLOWEST speed the pattern can appear at,
+   * because a short arc makes every obstacle a bigger fraction of it.
    */
   static validatePatterns() {
-    const DOUBLE = DIFFICULTY.PATTERN_DOUBLE_MAX_ARC;
     const REJUMP = DIFFICULTY.PATTERN_REJUMP_MIN_ARC;
+    const MIN_WINDOW = DIFFICULTY.PATTERN_MIN_WINDOW_ARC;
     let bad = 0;
+
     PATTERNS.forEach((p) => {
+      const speed = Phaser.Math.Linear(DIFFICULTY.SPEED_START, DIFFICULTY.SPEED_MAX, p.minI || 0);
+      const arc = ObstacleSpawner.jumpArcPx(speed);
+
       for (let i = 1; i < p.items.length; i++) {
         const gap = p.items[i].gap || 0;
-        const involvesDuck = p.items[i].type === 'idol-high' || p.items[i - 1].type === 'idol-high';
-        if (involvesDuck && gap < REJUMP) {
-          console.warn('[patterns] "' + p.name + '" item ' + i + ': ' + gap +
-            ' arcs next to a duck. You cannot duck and jump at once; needs >= ' + REJUMP);
+        const prev = p.items[i - 1].type, cur = p.items[i].type;
+        const involvesDuck = cur === 'idol-high' || prev === 'idol-high';
+
+        if (involvesDuck) {
+          if (gap < REJUMP) {
+            console.warn('[patterns] "' + p.name + '" item ' + i + ': ' + gap +
+              ' arcs next to a duck. You cannot duck and jump at once; needs >= ' + REJUMP);
+            bad++;
+          }
+          continue;
+        }
+        if (gap >= REJUMP) continue;            // land, then jump again: always fine
+
+        // --- it is a double: check the take-off window ---------------------
+        const a = ObstacleSpawner.itemSize(prev), b = ObstacleSpawner.itemSize(cur);
+        const fa = ObstacleSpawner.clearFraction(a.h);
+        const fb = ObstacleSpawner.clearFraction(b.h);
+        if (fa === null || fb === null) {
+          console.warn('[patterns] "' + p.name + '" item ' + i +
+            ': the jump is not tall enough to clear this obstacle at all');
           bad++;
-        } else if (!involvesDuck && gap > DOUBLE && gap < REJUMP) {
-          console.warn('[patterns] "' + p.name + '" item ' + i + ': ' + gap +
-            ' arcs is the unfair zone (too far for one jump, too close to land). ' +
-            'Use <= ' + DOUBLE + ' or >= ' + REJUMP);
+          continue;
+        }
+        const w2 = b.w / arc;
+        const window = (1 - fb) - w2 - gap - fa;
+        if (window < MIN_WINDOW) {
+          console.warn('[patterns] "' + p.name + '" item ' + i + ': gap ' + gap +
+            ' arcs leaves only ' + window.toFixed(3) + ' arcs of take-off window' +
+            ' (need ' + MIN_WINDOW + '). Max fair gap here is ' +
+            ((1 - fb) - w2 - fa - MIN_WINDOW).toFixed(2) + '.');
           bad++;
         }
       }
     });
+
     if (!bad) console.log('[patterns] ' + PATTERNS.length + ' patterns, all clearable');
     return bad;
   }

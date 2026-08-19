@@ -169,11 +169,12 @@ const DIFFICULTY = {
   CLUSTER_GAP_MAX: 300,
   CLUSTER_MIN_INTENSITY: 0.25, // No clusters before this much of the ramp.
 
-  // Pattern-authoring limits, in jump arcs. See PATTERNS below: a gap must be
-  // small enough to clear in one jump, or big enough to land and jump again.
-  // Anything between the two is the unfair zone -- she lands on the obstacle.
-  PATTERN_DOUBLE_MAX_ARC: 0.55,
+  // Pattern-authoring limits, in jump arcs. A gap is either small enough to
+  // clear both obstacles in one jump (a "double") or big enough to land and
+  // jump again. validatePatterns() checks doubles against the actual jump
+  // parabola rather than a flat arc-length rule -- see the comment there.
   PATTERN_REJUMP_MIN_ARC: 1.00,
+  PATTERN_MIN_WINDOW_ARC: 0.30,   // take-off freedom a double must leave the player
 };
 
 /* ---------------------------------------------------------------------
@@ -255,9 +256,9 @@ const PATTERNS = [
   { name: 'idol',           minI: 0.10, weight: 7,  items: [{ type: 'idol' }] },
 
   // --- doubles: one jump clears both -----------------------------------
-  { name: 'double-jar',     minI: 0.18, weight: 5,  items: [{ type: 'kimchi' }, { type: 'kimchi', gap: 0.42 }] },
-  { name: 'spike-jar',      minI: 0.22, weight: 5,  items: [{ type: 'spike' },  { type: 'kimchi', gap: 0.45 }] },
-  { name: 'jar-spike',      minI: 0.30, weight: 4,  items: [{ type: 'kimchi' }, { type: 'spike',  gap: 0.44 }] },
+  { name: 'double-jar',     minI: 0.18, weight: 5,  items: [{ type: 'kimchi' }, { type: 'kimchi', gap: 0.36 }] },
+  { name: 'spike-jar',      minI: 0.22, weight: 5,  items: [{ type: 'spike' },  { type: 'kimchi', gap: 0.40 }] },
+  { name: 'jar-spike',      minI: 0.30, weight: 4,  items: [{ type: 'kimchi' }, { type: 'spike',  gap: 0.32 }] },
 
   // --- land-and-jump-again rhythms --------------------------------------
   { name: 'two-beat',       minI: 0.25, weight: 6,  items: [{ type: 'spike' },  { type: 'spike',  gap: 1.15 }] },
@@ -271,7 +272,7 @@ const PATTERNS = [
                                                             { type: 'kimchi', gap: 0.44 }] },
 
   // --- late-game showpieces ---------------------------------------------
-  { name: 'gauntlet',       minI: 0.70, weight: 3,  items: [{ type: 'spike' },  { type: 'kimchi', gap: 0.45 },
+  { name: 'gauntlet',       minI: 0.70, weight: 3,  items: [{ type: 'spike' },  { type: 'kimchi', gap: 0.40 },
                                                             { type: 'spike',  gap: 1.25 }] },
   { name: 'idol-sandwich',  minI: 0.78, weight: 2,  items: [{ type: 'idol-low' }, { type: 'idol-high', gap: 1.35 },
                                                             { type: 'kimchi', gap: 1.30 }] },
