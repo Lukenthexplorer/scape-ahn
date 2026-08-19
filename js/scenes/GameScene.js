@@ -175,17 +175,16 @@ class GameScene extends Phaser.Scene {
      * is what "maxed out" looks like -- the ceiling is shown, not just
      * enforced. Hidden entirely when the boost is zero. */
     this.boostUi = this.add.container(GAME.WIDTH - 20, 92).setDepth(100).setAlpha(0);
-    this.boostUi.add(this.add.text(-118, -2, 'SUGAR', {
+    // Label sits to the LEFT of the bar (right-aligned so it grows outward,
+    // never under the bar) and doubles as the cap readout.
+    this.boostLabel = this.add.text(-120, -2, 'SUGAR', {
       fontFamily: F, fontSize: '13px', color: '#ff8ab4',
-    }).setOrigin(0, 0.5));
+    }).setOrigin(1, 0.5);
+    this.boostUi.add(this.boostLabel);
     this.boostUi.add(this.add.rectangle(0, 0, 112, 10, 0x2b1c36)
       .setOrigin(1, 0.5).setStrokeStyle(2, 0x6b4a7a));
     this.boostBar = this.add.rectangle(-110, 0, 0, 6, 0xff5c9e).setOrigin(0, 0.5);
     this.boostUi.add(this.boostBar);
-    this.boostMaxText = this.add.text(6, -2, 'MAX!', {
-      fontFamily: F, fontSize: '13px', color: PAL.uiWarn,
-    }).setOrigin(0, 0.5).setAlpha(0);
-    this.boostUi.add(this.boostMaxText);
 
     // Reserved for the swipe telegraph. General "he's close" pressure is the
     // vignette's job -- a permanent warning label is noise.
@@ -430,8 +429,12 @@ class GameScene extends Phaser.Scene {
     const frac = Phaser.Math.Clamp(this.speedBoost / CANDY.BOOST_MAX, 0, 1);
     this.boostUi.setAlpha(frac > 0.01 ? 1 : Math.max(0, this.boostUi.alpha - 0.06));
     this.boostBar.width = 108 * frac;
-    this.boostBar.fillColor = frac >= 0.999 ? 0xffd84a : 0xff5c9e;
-    this.boostMaxText.setAlpha(frac >= 0.999 ? 1 : 0);
+    // Tolerant threshold: the decay pulls it off an exact ceiling within a
+    // frame or two, so an equality test would make the cap nearly invisible.
+    const capped = frac >= 0.96;
+    this.boostBar.fillColor = capped ? 0xffd84a : 0xff5c9e;
+    this.boostLabel.setText(capped ? 'MAX!' : 'SUGAR');
+    this.boostLabel.setColor(capped ? PAL.uiWarn : '#ff8ab4');
 
     // Vignette tracks AHN's proximity continuously -- no state, no tweens.
     const prox = this.ahn.proximity();
@@ -507,12 +510,15 @@ class GameScene extends Phaser.Scene {
     this.score += bonus;
     this.ahn.addCredit(CANDY.AHN_PUSHBACK);
 
-    const wasCapped = this.speedBoost >= CANDY.BOOST_MAX - 1e-6;
+    // Clamped at the ceiling: say so, so the limit is something you are told
+    // about rather than something you silently stop benefiting from.
     this.speedBoost = Math.min(CANDY.BOOST_MAX, this.speedBoost + CANDY.BOOST_ADD);
+    const atCap = this.speedBoost >= CANDY.BOOST_MAX - 1e-6;
 
     Sfx.play('candy');
     this.spawnDust(candy.x, candy.y + 20, 10);
-    this.popup('+' + bonus + (wasCapped ? '' : '  SPEED+'), '#ff8ab4');
+    this.popup('+' + bonus + (atCap ? '  MAX SPEED!' : '  SPEED+'),
+      atCap ? PAL.uiWarn : '#ff8ab4');
     // A small kick so the acceleration is felt, not only metered.
     this.cameras.main.shake(90, 0.003);
     candy.deactivate();
