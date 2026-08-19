@@ -389,6 +389,24 @@ const SCORE = {
 };
 
 /* ---------------------------------------------------------------------
+ * 6b. GAME OVER SCREEN
+ * ---------------------------------------------------------------------
+ * The illustrated "AHN got you" splash GameOverScene shows behind the
+ * score panel. Cover-fit (scaled to fill the canvas width, cropped top
+ * and bottom) rather than letterboxed like the lore panels -- this one
+ * is a full-bleed sting, not a comic frame. A missing/failed file falls
+ * back to a plain dark panel, same resilience as LORE.PANELS.
+ * ------------------------------------------------------------------- */
+const GAMEOVER = {
+  IMAGE: 'assets/sprites/gamestates/defeat.png',
+  SCRIM_TOP: 0,        // alpha of the bottom-scrim gradient at its top edge --
+                        // 0 so it fades in from nothing, no visible seam
+                        // against the undimmed art above it.
+  SCRIM_BOTTOM: 0.92,  // alpha at the bottom edge (behind the score/button)
+  SCRIM_HEIGHT: 340,   // px of canvas height the bottom scrim covers
+};
+
+/* ---------------------------------------------------------------------
  * 7. ASSET MANIFEST  --  THE SWAP POINT FOR REAL PIXEL ART
  * ---------------------------------------------------------------------
  * Everything renders as a real Phaser Sprite driven by the animation
@@ -421,10 +439,12 @@ const ASSETS = {
     path: null,           // set this instead to use a single packed spritesheet
     frameWidth: 96, frameHeight: 128, frameCount: 9, artScale: 2,
     // She is drawn well under her source size so AHN reads as a giant next to
-    // her. Smoothly downscaled first, then upscaled 2x by artScale, so she
-    // stays on the same pixel grid as him -- see `resampled` in art.js. The
-    // frame keeps its size; she just occupies less of it, which is why the
-    // body boxes below are re-measured.
+    // her. Downscaled nearest-neighbour first, then upscaled 2x by artScale,
+    // so she stays crisp and on the same pixel grid as him -- see
+    // `resampled` in art.js (smooth resampling here would blur her at this
+    // source size, and the later nearest upscale would just blow that blur
+    // up into mush). The frame keeps its size; she just occupies less of it,
+    // which is why the body boxes below are re-measured.
     //
     // X and Y are scaled unevenly on purpose: shorter than the old uniform
     // 0.7 (a "squish") and noticeably wider (a stocky, chubby stance), which

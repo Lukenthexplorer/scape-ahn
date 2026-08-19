@@ -126,17 +126,18 @@ const PlaceholderArt = (function () {
    * ================================================================== */
 
   /**
-   * Resample a source image to `kx` x `ky` times its size, with smoothing ON.
+   * Resample a source image to `kx` x `ky` times its size, NEAREST-neighbour.
    * `ky` defaults to `kx` for a uniform resize; passing both independently is
    * how a character gets squashed/widened without distorting the source
    * pixel grid.
    *
-   * This is a deliberate two-step: shrink smoothly here, then let the strip's
-   * integer artScale blow the result back up with smoothing OFF. Doing it in
-   * one pass instead (drawing the source at k * artScale) would either blur
-   * the final sprite or, with nearest, leave ragged uneven pixel blocks.
-   * Two steps give a clean sprite that still sits on the same pixel grid as
-   * everything else in the game.
+   * Smooth (antialiased) resampling here used to be the plan -- shrink
+   * smoothly, then let the strip's integer artScale blow the result back up
+   * with smoothing OFF -- but for source art this small (48x48) the smooth
+   * shrink blurs edges into soft gradients, and the later nearest upscale
+   * just blows that blur up into visible mush instead of clean pixels.
+   * Nearest-neighbour at every step keeps colours flat and edges crisp,
+   * which reads as real pixel art even at a non-integer scale factor.
    */
   function resampled(img, kx, ky) {
     if (ky == null) ky = kx;
@@ -144,22 +145,22 @@ const PlaceholderArt = (function () {
     cv.width = Math.max(1, Math.round(img.width * kx));
     cv.height = Math.max(1, Math.round(img.height * ky));
     const c = cv.getContext('2d');
-    c.imageSmoothingEnabled = true;
-    c.imageSmoothingQuality = 'high';
+    c.imageSmoothingEnabled = false;
     c.drawImage(img, 0, 0, cv.width, cv.height);
     return cv;
   }
 
   /**
-   * Rotate an image about its centre, smoothly, on its own canvas.
-   * Same two-step reasoning as `resampled`: transform smoothly at source
-   * size, then let the strip's integer artScale do the crisp upscale.
+   * Rotate an image about its centre, nearest-neighbour, on its own canvas.
+   * Same reasoning as `resampled`: smoothing here would soften edges that
+   * the later nearest upscale would then blow up into mush. A little
+   * stair-stepping on the rotated edge reads as pixel art; a blur does not.
    */
   function rotated(img, deg) {
     const cv = document.createElement('canvas');
     cv.width = img.width; cv.height = img.height;
     const c = cv.getContext('2d');
-    c.imageSmoothingEnabled = true;
+    c.imageSmoothingEnabled = false;
     c.translate(cv.width / 2, cv.height / 2);
     c.rotate((deg * Math.PI) / 180);
     c.drawImage(img, -img.width / 2, -img.height / 2);
