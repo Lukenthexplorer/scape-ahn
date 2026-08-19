@@ -35,6 +35,17 @@ const GAME = {
 const BACKGROUND = {
   FAR:  { key: 'bgFar',  path: 'assets/sprites/background/background_far.png',  factor: 0.28 },
   NEAR: { key: 'bgNear', path: 'assets/sprites/background/background_near.png', factor: 1.0 },
+  // Phase 2 (PHASE2.SCORE_THRESHOLD): the subway platform. No `path` --
+  // these are drawn procedurally (PlaceholderArt.buildSubwayBackdrop) at the
+  // same pixel size as BG_SRC, so Backdrop's scale/split math needs no
+  // changes to show them; Backdrop.setLayers() just points at these keys.
+  SUBWAY_FAR:  { key: 'bgSubwayFar',  factor: 0.28 },
+  SUBWAY_NEAR: { key: 'bgSubwayNear', factor: 1.0 },
+  // A second, fully separate far-layer texture -- tunnel recesses lit up
+  // with a train -- swapped in briefly by Backdrop.setFarTrainFlash(). A
+  // real key swap, not a repaint of SUBWAY_FAR in place: see the comment on
+  // that method for why.
+  SUBWAY_FAR_TRAIN: { key: 'bgSubwayFarTrain' },
 };
 
 /* ---------------------------------------------------------------------
@@ -273,6 +284,25 @@ const OBSTACLES = {
     // instead left only ~0.16s of reading time at top speed.
     POSE_BY_X: 620,
   },
+
+  // --- phase 2 (subway) obstacles -- static, no choreography needed -------
+  TURNSTILE: {
+    type: 'turnstile',
+    body: { w: 44, h: 46, ox: 10, oy: 18 },
+  },
+  CART: {
+    type: 'cart',
+    body: { w: 72, h: 34, ox: 8, oy: 14 },
+  },
+  SIGN: {
+    // A hanging departure board -- same footprint/height as IDOL.bodyHigh
+    // and IDOL.highY on purpose: that geometry is the TUNED duck window
+    // (see IDOL above), and reusing it exactly means this needs no
+    // independent re-derivation.
+    type: 'sign',
+    hangY: 17,
+    body: { w: 60, h: 60, ox: 10, oy: 12 },
+  },
 };
 
 /* ---------------------------------------------------------------------
@@ -325,6 +355,22 @@ const PATTERNS = [
                                                             { type: 'spike',  gap: 1.28 }] },
   { name: 'idol-sandwich',  minI: 0.78, weight: 2,  items: [{ type: 'idol-low' }, { type: 'idol-high', gap: 1.35 },
                                                             { type: 'kimchi', gap: 1.30 }] },
+
+  // --- phase 2 (subway, PHASE2.SCORE_THRESHOLD) --------------------------
+  // `phase: 2` is the only thing that gates these in -- see
+  // ObstacleSpawner.pickPattern(). Intensity is already maxed by the time
+  // phase 2 starts (RAMP_DISTANCE is far behind at that score), so minI is
+  // left at its default and does no work here; it is just future-proofing
+  // in case phase 2 ever starts earlier.
+  { name: 'turnstile',        phase: 2, weight: 10, items: [{ type: 'turnstile' }] },
+  { name: 'sign-duck',        phase: 2, weight: 8,  items: [{ type: 'sign' }] },
+  { name: 'cart',             phase: 2, weight: 8,  items: [{ type: 'cart' }] },
+  { name: 'double-turnstile', phase: 2, weight: 5,  items: [{ type: 'turnstile' }, { type: 'turnstile', gap: 0.36 }] },
+  { name: 'turnstile-cart',   phase: 2, weight: 5,  items: [{ type: 'turnstile' }, { type: 'cart', gap: 1.20 }] },
+  { name: 'duck-jump-sub',    phase: 2, weight: 5,  items: [{ type: 'sign' },      { type: 'turnstile', gap: 1.32 }] },
+  { name: 'jump-duck-sub',    phase: 2, weight: 5,  items: [{ type: 'cart' },      { type: 'sign', gap: 1.32 }] },
+  { name: 'sub-gauntlet',     phase: 2, weight: 3,  items: [{ type: 'turnstile' }, { type: 'cart', gap: 0.26 },
+                                                             { type: 'turnstile', gap: 1.28 }] },
 ];
 
 /* ---------------------------------------------------------------------
@@ -403,6 +449,45 @@ const SCORE = {
   MULT_DECAY_RATE: 0.55,  // Multiplier lost per second once decaying.
   PX_PER_METRE: 40,       // Purely cosmetic: world px -> the 'm survived' readout.
   BEST_KEY: 'scapeahn.best',
+};
+
+/* ---------------------------------------------------------------------
+ * 6a. PHASE 2  --  the Seoul subway
+ * ---------------------------------------------------------------------
+ * At SCORE_THRESHOLD, GameScene.enterPhase2() fires once: a flash, a title
+ * card, the backdrop swaps to BACKGROUND.SUBWAY_FAR/NEAR, and the spawner
+ * switches from PATTERNS tagged phase 1 (the default) to the ones tagged
+ * `phase: 2`. AHN, Nina, scoring and the difficulty ramp are untouched --
+ * this is a reskin + a new obstacle vocabulary, not a new ruleset.
+ * ------------------------------------------------------------------- */
+const PHASE2 = {
+  SCORE_THRESHOLD: 6700,
+  BANNER_TITLE: 'SEOUL SUBWAY',
+  BANNER_SUB: 'AHN follows her underground...',
+
+  // The station-entrance cutscene (GameScene.playSubwayEntrance()): she runs
+  // to the archway, then "descends" -- sinks, shrinks and fades -- before
+  // the world swaps underneath her. Times in ms.
+  ENTRANCE_KEY: 'metroEntrance',
+  ENTRANCE_RUN_MS: 260,      // closing the gap to the archway
+  ENTRANCE_DESCEND_MS: 520,  // sinking out of frame once she's there
+
+  // "A train just rushed past" -- lights up the far layer's tunnel recesses
+  // for TRAIN_FLASH_MS, then goes dark again; re-scheduled on a random
+  // TRAIN_GAP_MIN..MAX delay each time. Purely ambient, no gameplay effect.
+  TRAIN_GAP_MIN_MS: 5000,
+  TRAIN_GAP_MAX_MS: 11000,
+  TRAIN_FLASH_MS: 650,
+};
+
+/* Dev cheats -- see GameScene.bindInput()/cheatToggleGodMode(). Not gated
+ * behind a URL flag; the trigger (a Konami-code arrow sequence) is obscure
+ * enough not to fire by accident. */
+const CHEATS = {
+  FF_SPEED: 8000,   // px/s world speed while god mode + holding -> is held.
+                    // ~9x SPEED_MAX -- fast enough to reach PHASE2.SCORE_
+                    // THRESHOLD in well under a minute, slow enough to still
+                    // watch the transition happen rather than teleporting.
 };
 
 /* ---------------------------------------------------------------------
@@ -549,6 +634,29 @@ const ASSETS = {
     },
   },
 
+  /* Phase 2 (subway) obstacles -- placeholders, same recipe as the street's. */
+  turnstile: {
+    key: 'turnstile',
+    path: null,
+    frameWidth: 64, frameHeight: 72, frameCount: 2, artScale: 2,
+    outline: '#150c1c',
+    anims: { 'turnstile-idle': { frames: [0, 1], frameRate: 3, repeat: -1 } },
+  },
+  cart: {
+    key: 'cart',
+    path: null,
+    frameWidth: 88, frameHeight: 56, frameCount: 2, artScale: 2,
+    outline: '#150c1c',
+    anims: { 'cart-idle': { frames: [0, 1], frameRate: 4, repeat: -1 } },
+  },
+  sign: {
+    key: 'sign',
+    path: null,
+    frameWidth: 80, frameHeight: 96, frameCount: 2, artScale: 2,
+    outline: '#150c1c',
+    anims: { 'sign-idle': { frames: [0, 1], frameRate: 2, repeat: -1 } },
+  },
+
   // Candy pickup (placeholder lollipop).
   candy: {
     key: 'candy',
@@ -644,4 +752,19 @@ const PAL = {
   spikeGrey: '#9aa3ad', spikeDark: '#5c646d',
   idolA: '#4ad6ff', idolB: '#ffd84a', idolPose: '#ff4ad6',
   uiText: '#ffffff', uiAccent: '#ff6fa5', uiWarn: '#ffd84a',
+};
+
+/* Phase 2 (subway) palette -- cool fluorescent tile instead of the street's
+ * warm neon, so the swap itself reads as "somewhere new" even before the
+ * player registers any single new shape. Kept separate from PAL since
+ * nothing on the street should ever pull from it. */
+const SUBWAY = {
+  wallTile: '#dce6e8', wallTileDark: '#b9c8cc', wallTrim: '#2f7d8c',
+  ceilingDark: '#12181c', pillar: '#5c6a70', pillarDark: '#3a454a',
+  platformFloor: '#2a3236', platformEdge: '#e8c93f', trackPit: '#08090a',
+  signBg: '#141b1f', signText: '#f5c53d', lightGlow: '#fff6d8',
+  trainBody: '#3c4a52', trainWindow: '#bfe8ff',
+  // The ornate station-entrance archway (GameScene.playSubwayEntrance()).
+  archGreen: '#2f5a4a', archGreenDark: '#163027', archLamp: '#c8172f',
+  signPlate: '#e8c93f',
 };

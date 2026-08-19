@@ -13,9 +13,9 @@ and drop `artScale` from that entry.
 Builds assets/sprites/ahn/ahn.png : a 9-frame horizontal spritesheet that
 matches the ASSETS.ahn entry in js/config.js.
 
-    frames 0-3 : run cycle
-    frames 4-6 : trip gag (pratfall)
-    frames 7-8 : catch (game-over grab)
+    frames 0-3 : run cycle (mouth flaps open/closed as he runs)
+    frames 4-6 : trip gag (pratfall, mouth open -- he's yelling)
+    frames 7-8 : catch (game-over grab, mouth open -- the chomp)
 
 THE LOOK: a smooth, full-resolution photo head, deliberately oversized, sitting
 on a chunky pixel-art body. The mismatch is the joke -- do not "fix" it by
@@ -59,9 +59,18 @@ HEAD_Y = 0
 FACE_CROP = (134, 48, 324, 340)   # tight on the face: any wider and the
                                   # bright ballroom background survives the mask
 
+# Mouth geometry in HEAD-space (60x76), hand-measured off the resized photo:
+# the smile sits at y 58-65, x 13-43. Splitting the head here and dropping
+# the jaw piece is how the "open mouth" pose is built -- see _open_face().
+MOUTH_Y = 61                     # split line between the upper face and jaw
+MOUTH_X0, MOUTH_X1 = 14, 42      # x-range of the open-mouth oval
+MOUTH_GAP = 7                    # px the jaw drops for the open pose
+MOUTH_FILL = (60, 10, 16, 255)   # dark mouth-interior colour
+TOOTH = (245, 238, 225, 255)
 
-def build_head():
-    """Photo -> a big, smooth, background-free head with a dark keyline."""
+
+def _face_and_mask():
+    """Photo -> (smooth background-free head RGBA, its alpha mask)."""
     src = Image.open(PHOTO).convert('RGB').crop(FACE_CROP)
     head = src.resize((HEAD_W, HEAD_H), Image.LANCZOS)      # smooth, NOT pixelated
     head = ImageEnhance.Color(head).enhance(1.25)
@@ -78,15 +87,63 @@ def build_head():
     d.rectangle((HEAD_W - 13, 0, HEAD_W - 1, 10), fill=0)
     mask = mask.filter(ImageFilter.GaussianBlur(0.6))       # soften the cutout edge
     head.putalpha(mask)
+    return head, mask
 
-    # Keyline: 2px dark outline so a photo head still reads against neon.
-    out = Image.new('RGBA', (HEAD_W + 8, HEAD_H + 8), (0, 0, 0, 0))
-    silhouette = Image.new('RGBA', head.size, BLACK)
-    silhouette.putalpha(mask.point(lambda a: 255 if a > 40 else 0))
+
+def _assemble_face(head, mask, open_mouth):
+    """Cut the head at MOUTH_Y into an upper piece and a jaw piece.
+
+    Closed: the jaw is glued back on with zero gap -- pixel-identical to the
+    un-split photo, so the default look is unchanged. Open: the jaw drops
+    MOUTH_GAP px, and the gap between the two pieces is filled dark, so the
+    same photo reads as mid-chomp instead of needing a second photo.
+    """
+    gap = MOUTH_GAP if open_mouth else 0
+    face = Image.new('RGBA', (HEAD_W, HEAD_H + gap), (0, 0, 0, 0))
+    face.alpha_composite(head.crop((0, 0, HEAD_W, MOUTH_Y)), (0, 0))
+    face.alpha_composite(head.crop((0, MOUTH_Y, HEAD_W, HEAD_H)), (0, MOUTH_Y + gap))
+
+    face_mask = Image.new('L', (HEAD_W, HEAD_H + gap), 0)
+    face_mask.paste(mask.crop((0, 0, HEAD_W, MOUTH_Y)), (0, 0))
+    face_mask.paste(mask.crop((0, MOUTH_Y, HEAD_W, HEAD_H)), (0, MOUTH_Y + gap))
+
+    if gap:
+        # A flat rectangle here reads as a censor bar, not an open mouth --
+        # an outlined oval (rim + inset fill, the same 2-layer trick as the
+        # head's own keyline) reads as a hole. A few pale teeth nubs along
+        # the top rim sell it as a mouth rather than a plain dark smudge.
+        rim = (MOUTH_X0 - 1, MOUTH_Y - 2, MOUTH_X1 + 1, MOUTH_Y + gap + 2)
+        inner = (MOUTH_X0 + 1, MOUTH_Y, MOUTH_X1 - 1, MOUTH_Y + gap)
+        d = ImageDraw.Draw(face)
+        d.ellipse(rim, fill=BLACK)
+        d.ellipse(inner, fill=MOUTH_FILL)
+        for tx in range(MOUTH_X0 + 4, MOUTH_X1 - 3, 5):
+            d.rectangle((tx, MOUTH_Y - 1, tx + 2, MOUTH_Y + 1), fill=TOOTH)
+
+        # Keep the head-shaped mask solid across the rim so the outer keyline
+        # wraps the open jaw instead of stopping dead at the old mouth line.
+        ImageDraw.Draw(face_mask).ellipse(rim, fill=255)
+    return face, face_mask
+
+
+def _keyline(face, face_mask):
+    """2px dark outline so a photo head still reads against neon."""
+    w, h = face.size
+    out = Image.new('RGBA', (w + 8, h + 8), (0, 0, 0, 0))
+    silhouette = Image.new('RGBA', (w, h), BLACK)
+    silhouette.putalpha(face_mask.point(lambda a: 255 if a > 40 else 0))
     for dx, dy in ((-2, 0), (2, 0), (0, -2), (0, 2), (-2, -2), (2, -2), (-2, 2), (2, 2)):
         out.alpha_composite(silhouette, (4 + dx, 4 + dy))
-    out.alpha_composite(head, (4, 4))
+    out.alpha_composite(face, (4, 4))
     return out
+
+
+def build_heads():
+    """Return (mouth_closed, mouth_open) keylined head images."""
+    head, mask = _face_and_mask()
+    closed = _keyline(*_assemble_face(head, mask, False))
+    open_ = _keyline(*_assemble_face(head, mask, True))
+    return closed, open_
 
 
 def draw_body(d, frame, stride, bob, reach):
@@ -137,13 +194,20 @@ def draw_cane(d, tripping):
     d.rectangle((cx - 12, cy - 10, cx - 4, cy + 6), fill=RED_LIGHT)
 
 
-def build_frame(i, head):
+# Which of the 9 frames show the open-mouth head: the passing/bob beats of
+# the run cycle (a flap every other step, like he's panting), plus the whole
+# trip (yelling) and catch (the chomp) -- see build_heads().
+MOUTH_OPEN_FRAMES = {1, 3, 4, 5, 6, 7, 8}
+
+
+def build_frame(i, heads):
     """One 112x176 frame."""
     img = Image.new('RGBA', (FW, FH), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
 
     tripping = 4 <= i <= 6
     catching = i >= 7
+    head = heads[1] if i in MOUTH_OPEN_FRAMES else heads[0]
 
     # run cycle: 0/2 are the extended strides, 1/3 the passing poses (+bob)
     stride = 6 if i == 0 else (-6 if i == 2 else 0)
@@ -184,10 +248,10 @@ def build_frame(i, head):
 def main():
     if not os.path.exists(PHOTO):
         raise SystemExit('reference photo not found: ' + PHOTO)
-    head = build_head()
+    heads = build_heads()
     sheet = Image.new('RGBA', (FW * COUNT, FH), (0, 0, 0, 0))
     for i in range(COUNT):
-        sheet.alpha_composite(build_frame(i, head), (i * FW, 0))
+        sheet.alpha_composite(build_frame(i, heads), (i * FW, 0))
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     sheet.save(OUT)
     print('wrote %s  (%dx%d, %d frames of %dx%d, head %dx%d)'
