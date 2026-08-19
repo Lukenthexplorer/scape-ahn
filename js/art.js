@@ -553,11 +553,18 @@ const PlaceholderArt = (function () {
     r(c, 0, 0, 2, 4, 'rgba(226,238,255,0.85)');
   }
 
+  /* HEART -- 0 full | 1 spent (hollow) | 2 gold (god mode).
+   * The gold state is its OWN frame rather than a tint on frame 0: Phaser
+   * tints multiply against the texture, and pink x gold comes out orange. */
   function drawHeart(c, f) {
-    const fill = f === 0 ? '#ff5c7a' : '#4a3355';
+    const fill = f === 2 ? '#ffd84a' : (f === 0 ? '#ff5c7a' : '#4a3355');
     r(c, 2, 2, 6, 6, fill); r(c, 12, 2, 6, 6, fill);
     r(c, 2, 6, 16, 5, fill); r(c, 4, 11, 12, 3, fill); r(c, 7, 14, 6, 3, fill);
     if (f === 1) r(c, 5, 5, 10, 6, '#2b1c36');
+    if (f === 2) {                                   // highlight, so it reads as metal
+      r(c, 4, 4, 3, 3, '#fff3b0'); r(c, 13, 4, 2, 2, '#fff3b0');
+      r(c, 8, 12, 3, 2, '#c9a020');
+    }
   }
 
   const DRAWERS = {

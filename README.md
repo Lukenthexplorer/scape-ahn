@@ -89,8 +89,10 @@ yet, and spawning nothing would be worse than a reskin.
 Nina is always available. **Rafa** -- mounted on a rhino, and the only one with
 real jump art -- is unlocked by reaching phase 3, remembered in localStorage,
 and picked on the title screen (the picker only appears once something is
-actually unlocked). He brings his own running theme, which takes over the
-music channel while he is the runner.
+actually unlocked). He brings his own running theme, which **layers over** the
+soundtrack rather than replacing it -- an 11-second gallop loop is not a
+substitute for a six-minute track, and replacing it silenced the per-phase
+music for anyone who picked him.
 
 Everything character-specific lives in `CHARACTERS`: texture, animation names
 and **both hitboxes**, because the two are not the same shape. Their tuned
@@ -312,6 +314,12 @@ head, composited at full resolution over the pixel body. It is **not wired in**
   so real art dropped in at the same frame sizes needs no retuning.
 - Nina only has a real run cycle; jump / fall / duck / hurt are re-posed from
   it. Real frames for those are the highest-value art upgrade left.
+- The music channel is two independent streams: the per-phase soundtrack
+  (`AUDIO.MUSIC`, `PHASE2.MUSIC`, ...) and an optional per-character loop.
+  They mix; neither cancels the other. `Sfx.state()` dumps what is loaded and
+  whether it is actually running -- playback rejections are recorded there
+  instead of being swallowed, which is what made a silent soundtrack hard to
+  spot in the first place.
 - Sound effects other than the jump are still procedural: layered oscillators
   and filtered noise (`AUDIO.SOUNDS[*].synth`), not beeps, but not samples
   either. Setting `src` on a cue replaces it.

@@ -475,7 +475,7 @@ const PHASE2 = {
   SCORE_THRESHOLD: 6700,
   // Underground gets its own track. Streams like the main soundtrack, so the
   // swap mid-run costs nothing. Phases with no MUSIC fall back to AUDIO.MUSIC.
-  MUSIC: { src: 'assets/audio/soundtrack_phase2.mp3', volume: 0.34 },
+  MUSIC: { src: 'assets/audio/soundtrack_phase2.mp3', volume: 0.5 },
   BANNER_TITLE: 'SEOUL SUBWAY',
   BANNER_SUB: 'AHN follows her underground...',
 
@@ -561,7 +561,7 @@ const CHARACTERS = {
     // His own running theme. Long enough to be music rather than an effect,
     // so it streams and REPLACES the soundtrack while he is the runner --
     // layering two full-length loops just muddies both.
-    runLoop: { src: 'assets/audio/rafa_running.mp3', volume: 0.5 },
+    runLoop: { src: 'assets/audio/rafa_running.mp3', volume: 0.38 },
   },
   SELECTED_KEY: 'scapeahn.character',
 };
@@ -810,7 +810,7 @@ const ASSETS = {
   dust:  { key: 'dust',  path: null, frameWidth: 12, frameHeight: 12, frameCount: 1, artScale: 2, anims: {} },
   drop:  { key: 'drop',  path: null, frameWidth: 2,  frameHeight: 14, frameCount: 1, anims: {} },
   streak: { key: 'streak', path: null, frameWidth: 26, frameHeight: 2, frameCount: 1, anims: {} },
-  heart: { key: 'heart', path: null, frameWidth: 40, frameHeight: 36, frameCount: 2, artScale: 2, anims: {} },
+  heart: { key: 'heart', path: null, frameWidth: 40, frameHeight: 36, frameCount: 3, artScale: 2, anims: {} },
 };
 
 /* ---------------------------------------------------------------------
@@ -829,7 +829,7 @@ const AUDIO = {
    * on decodeAudioData for every audio file, so a multi-megabyte track holds
    * the loading screen hostage until the whole thing is decoded. Streaming it
    * through a plain <audio> element starts instantly and loads while you play. */
-  MUSIC: { src: 'assets/audio/soundtrack.mp3', volume: 0.34, loop: true },
+  MUSIC: { src: 'assets/audio/soundtrack.mp3', volume: 0.5, loop: true },
   MUSIC_DUCK: 0.35,         // music volume multiplier during the game-over screen
   SYNTH_FALLBACK: true,   // Set false for total silence until real files land.
   SOUNDS: {

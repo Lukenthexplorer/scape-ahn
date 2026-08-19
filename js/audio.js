@@ -28,6 +28,8 @@ const Sfx = (function () {
   let music = null;         // HTMLAudioElement, the main soundtrack
   let charLoop = null;      // HTMLAudioElement, a character's own running theme
   let pendingTrack = null;  // soundtrack to restore once a char theme clears
+  let charLoopDef = null;   // config behind charLoop, for volume restores
+  let lastError = null;     // last playback rejection, surfaced by state()
   let muted = false;
   let started = false;
 
@@ -151,14 +153,13 @@ const Sfx = (function () {
 
   /**
    * Swap the soundtrack (e.g. per phase). Pass nothing to go back to
-   * AUDIO.MUSIC. A character's own theme outranks this: if one is playing,
-   * the change is remembered and applied when that theme is cleared.
+   * AUDIO.MUSIC. Independent of any character loop: those LAYER over the
+   * soundtrack rather than replacing it (see setCharacterLoop).
    */
   function setMusicTrack(def) {
     const target = (def && def.src) ? def : AUDIO.MUSIC;
     if (!target || !target.src) return;
     pendingTrack = target;
-    if (charLoop) return;                    // a runner's theme owns the channel
     if (music && music.src.indexOf(target.src) !== -1) return;   // already on it
 
     if (music) music.pause();
@@ -172,46 +173,52 @@ const Sfx = (function () {
 
   /**
    * Give the current runner their own looping theme (CHARACTERS[x].runLoop),
-   * or pass nothing to clear it. While one is playing the main soundtrack is
-   * paused rather than mixed under it: both are full-length loops and stacking
-   * them just muddies the pair.
+   * or pass nothing to clear it.
+   *
+   * It LAYERS over the soundtrack. An earlier version replaced it, which
+   * silenced the per-phase music for the whole run whenever that runner was
+   * picked -- and since a character loop is a short gallop/riff rather than a
+   * full-length track, replacing a six-minute soundtrack with it was never
+   * the right trade.
    */
   function setCharacterLoop(def) {
     stopCharacterLoop();
     if (!def || !def.src || !AUDIO.ENABLED) return;
+    charLoopDef = def;
     charLoop = new Audio(def.src);
     charLoop.loop = true;
     charLoop.preload = 'auto';
     charLoop.volume = (def.volume != null ? def.volume : 1) * AUDIO.MASTER_VOLUME;
     charLoop.muted = muted;
-    if (music) music.pause();
     const p = charLoop.play();
-    if (p && p.catch) p.catch(() => {});
+    if (p && p.catch) p.catch((e) => { lastError = 'charLoop: ' + e.name; });
   }
 
   function stopCharacterLoop() {
     if (!charLoop) return;
     charLoop.pause();
     charLoop = null;
-    if (pendingTrack) setMusicTrack(pendingTrack);   // whatever the phase wanted
-    else playMusic();
+    charLoopDef = null;
   }
 
   /** Pause/resume whichever loop is currently the "music" (scene pause). */
   function setLoopPaused(on) {
-    const track = charLoop || music;
-    if (!track) return;
-    if (on) track.pause();
-    else if (!muted && AUDIO.ENABLED) { const p = track.play(); if (p && p.catch) p.catch(() => {}); }
+    [music, charLoop].forEach((track) => {
+      if (!track) return;
+      if (on) track.pause();
+      else if (!muted && AUDIO.ENABLED) {
+        const p = track.play();
+        if (p && p.catch) p.catch(() => {});
+      }
+    });
   }
 
   /** Start the looping background music. Safe to call repeatedly. */
   function playMusic() {
     if (!AUDIO.ENABLED || muted || !music || !music.paused) return;
-    if (charLoop) return;          // a character theme owns the channel
 
     const p = music.play();
-    if (p && p.catch) p.catch(() => {});   // pre-gesture rejection is expected
+    if (p && p.catch) p.catch((e) => { lastError = 'music: ' + e.name; });
   }
 
   function stopMusic() { if (music) music.pause(); }
@@ -233,6 +240,16 @@ const Sfx = (function () {
   function toggleMute() { return setMuted(!muted); }
   function isMuted() { return muted; }
 
+  /** Diagnostics for the music channel -- what is loaded and whether it runs. */
+  function state() {
+    const d = (a) => a ? { src: a.src.split('/').pop(), paused: a.paused,
+                           t: +a.currentTime.toFixed(1), vol: +a.volume.toFixed(2),
+                           err: a.error ? a.error.code : null } : null;
+    return { lastError: lastError, music: d(music), charLoop: d(charLoop),
+             pending: pendingTrack ? pendingTrack.src.split('/').pop() : null,
+             muted: muted, ctx: actx ? actx.state : null };
+  }
+
   return { init, unlock, play, playMusic, stopMusic, duckMusic, setMuted, toggleMute, isMuted,
-           setCharacterLoop, stopCharacterLoop, setLoopPaused, setMusicTrack };
+           setCharacterLoop, stopCharacterLoop, setLoopPaused, setMusicTrack, state };
 })();

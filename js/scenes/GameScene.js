@@ -51,10 +51,12 @@ class GameScene extends Phaser.Scene {
     // Short grace period so the player is never hit before they can react.
     this.spawner.distanceSinceSpawn = -260;
 
-    // A runner with their own theme takes over the music channel.
+    // Soundtrack always runs; a runner's own theme layers on top of it.
+    Sfx.setMusicTrack(AUDIO.MUSIC);
+    Sfx.playMusic();
     const chr = CHARACTERS[this.charKey];
     if (chr && chr.runLoop) Sfx.setCharacterLoop(chr.runLoop);
-    else { Sfx.stopCharacterLoop(); Sfx.playMusic(); }
+    else Sfx.stopCharacterLoop();
     Sfx.duckMusic(false);
     this.cameras.main.fadeIn(220, 0, 0, 0);
   }
@@ -221,7 +223,7 @@ class GameScene extends Phaser.Scene {
 
     // Dev cheat indicator (see cheatToggleGodMode()). Off by default.
     this.godModeText = this.add.text(GAME.WIDTH / 2, GAME.HEIGHT - 16,
-      'GOD MODE -- hold → to fast-forward', {
+      'GOD MODE -- infinite lives · hold → to fast-forward', {
         fontFamily: F, fontSize: '14px', color: '#ffe066', stroke: '#2b0d1c', strokeThickness: 3,
       }).setOrigin(0.5, 1).setDepth(101).setAlpha(0);
   }
@@ -279,7 +281,15 @@ class GameScene extends Phaser.Scene {
   }
 
   refreshHearts() {
-    this.hearts.forEach((h, i) => h.setFrame(i < this.lives ? 0 : 1));
+    this.hearts.forEach((h, i) => {
+      if (this.godMode) {
+        // All full, and the dedicated gold frame -- nothing can take one, so
+        // showing them spent would misreport the state you are actually in.
+        h.clearTint().setFrame(2).setAlpha(1);
+      } else {
+        h.clearTint().setFrame(i < this.lives ? 0 : 1);
+      }
+    });
   }
 
   /* ==================================================================
@@ -317,8 +327,29 @@ class GameScene extends Phaser.Scene {
     const ARROW_NAMES = { arrowup: 'up', arrowdown: 'down', arrowleft: 'left', arrowright: 'right' };
     this.cheatBuffer = [];
 
+    /* Second way in: SPACE + UP + M held together. Tracked with our own
+     * held-key set rather than Phaser's key objects, because those stop
+     * updating while the scene is paused and would leave the chord half
+     * latched. `blur` clears it so a key released off-window cannot stick. */
+    const CHORD = [' ', 'arrowup', 'm'];
+    this.heldKeys = new Set();
+
     this.onWindowKey = (e) => {
       const k = (e.key || '').toLowerCase();
+      this.heldKeys.add(k);
+
+      if (CHORD.every((c) => this.heldKeys.has(c))) {
+        e.preventDefault();
+        this.heldKeys.clear();
+        // Swallow the side effects the chord's own keys would otherwise fire:
+        // M would toggle mute, and space/up would have started a jump.
+        if (this.player && this.player.body && this.player.body.velocity.y < 0) {
+          this.player.body.setVelocityY(0);
+        }
+        this.cheatToggleGodMode();
+        return;
+      }
+
       if (k === 'p') { e.preventDefault(); this.togglePause(); }
       else if (k === 'm') Sfx.toggleMute();
       else if (k === '/') { e.preventDefault(); this.cheatInstantLose(); }
@@ -336,7 +367,11 @@ class GameScene extends Phaser.Scene {
     this.onWindowPointer = () => {
       if (!this.isOver && this.scene.isPaused()) this.scene.resume();
     };
+    this.onWindowKeyUp = (e) => this.heldKeys.delete((e.key || '').toLowerCase());
+    this.onWindowBlur = () => this.heldKeys.clear();
     window.addEventListener('keydown', this.onWindowKey);
+    window.addEventListener('keyup', this.onWindowKeyUp);
+    window.addEventListener('blur', this.onWindowBlur);
     window.addEventListener('pointerdown', this.onWindowPointer);
 
     /* ---- touch --------------------------------------------------------
@@ -387,6 +422,8 @@ class GameScene extends Phaser.Scene {
       this.game.events.off(Phaser.Core.Events.BLUR, this.onBlur);
       this.game.events.off(Phaser.Core.Events.FOCUS, this.onFocus);
       window.removeEventListener('keydown', this.onWindowKey);
+      window.removeEventListener('keyup', this.onWindowKeyUp);
+      window.removeEventListener('blur', this.onWindowBlur);
       window.removeEventListener('pointerdown', this.onWindowPointer);
     });
   }
@@ -429,6 +466,7 @@ class GameScene extends Phaser.Scene {
       this.player.clearTint();
       this.godModeText.setAlpha(0);
     }
+    this.refreshHearts();
   }
 
   /* ==================================================================
