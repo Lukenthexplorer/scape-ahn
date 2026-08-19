@@ -129,6 +129,39 @@ class Spikes extends Obstacle {
 }
 
 /* ---------------------------------------------------------------------
+ * TURNSTILE / LUGGAGE CART -- phase 2 (subway) ground obstacles, jump over.
+ * Static like Spikes/KimchiJar: no choreography, just a hitbox and an idle
+ * anim for a little visual life.
+ * ------------------------------------------------------------------- */
+class Turnstile extends Obstacle {
+  constructor(scene, x) {
+    super(scene, x, GAME.GROUND_Y, ASSETS.turnstile.key);
+    this.obstacleType = 'turnstile';
+    this.reset(x);
+  }
+
+  reset(x) {
+    super.reset(x, GAME.GROUND_Y);
+    this.applyBody(OBSTACLES.TURNSTILE.body);
+    this.play('turnstile-idle');
+  }
+}
+
+class LuggageCart extends Obstacle {
+  constructor(scene, x) {
+    super(scene, x, GAME.GROUND_Y, ASSETS.cart.key);
+    this.obstacleType = 'cart';
+    this.reset(x);
+  }
+
+  reset(x) {
+    super.reset(x, GAME.GROUND_Y);
+    this.applyBody(OBSTACLES.CART.body);
+    this.play('cart-idle');
+  }
+}
+
+/* ---------------------------------------------------------------------
  * K-POP IDOL -- lane obstacle with choreography.
  * ---------------------------------------------------------------------
  * The lane (and therefore the required input) is decided at spawn and
@@ -195,6 +228,26 @@ class IdolDancer extends Obstacle {
 }
 
 /* ---------------------------------------------------------------------
+ * HANGING SIGN -- phase 2 (subway) overhead obstacle, duck under.
+ * Static, at a fixed height: it reuses IDOL.highY/bodyHigh's geometry (see
+ * OBSTACLES.SIGN in config.js), so it needs no choreography or telegraph --
+ * it is simply always in its final position, like a plain floating blocker.
+ * ------------------------------------------------------------------- */
+class HangingSign extends Obstacle {
+  constructor(scene, x) {
+    super(scene, x, GAME.GROUND_Y - OBSTACLES.SIGN.hangY, ASSETS.sign.key);
+    this.obstacleType = 'sign';
+    this.reset(x);
+  }
+
+  reset(x) {
+    super.reset(x, GAME.GROUND_Y - OBSTACLES.SIGN.hangY);
+    this.applyBody(OBSTACLES.SIGN.body);
+    this.play('sign-idle');
+  }
+}
+
+/* ---------------------------------------------------------------------
  * CANDY -- the only thing on screen you WANT to touch.
  * ------------------------------------------------------------------- */
 class Candy extends Obstacle {
@@ -255,6 +308,9 @@ class ObstacleSpawner {
     if (type === 'spike') return OBSTACLES.SPIKE.body;
     if (type === 'idol-low') return OBSTACLES.IDOL.bodyLow;
     if (type === 'idol-high') return OBSTACLES.IDOL.bodyHigh;
+    if (type === 'turnstile') return OBSTACLES.TURNSTILE.body;
+    if (type === 'cart') return OBSTACLES.CART.body;
+    if (type === 'sign') return OBSTACLES.SIGN.body;
     return OBSTACLES.IDOL.bodyLow;   // plain 'idol' may roll either way
   }
 
@@ -298,7 +354,8 @@ class ObstacleSpawner {
       for (let i = 1; i < p.items.length; i++) {
         const gap = p.items[i].gap || 0;
         const prev = p.items[i - 1].type, cur = p.items[i].type;
-        const involvesDuck = cur === 'idol-high' || prev === 'idol-high';
+        const isDuck = (t) => t === 'idol-high' || t === 'sign';
+        const involvesDuck = isDuck(cur) || isDuck(prev);
 
         if (involvesDuck) {
           if (gap < REJUMP) {
@@ -348,7 +405,8 @@ class ObstacleSpawner {
     this.scene = scene;
     this.group = group;
     this.candyGroup = candyGroup;
-    this.pools = { kimchi: [], spike: [], idol: [], candy: [] };
+    this.pools = { kimchi: [], spike: [], idol: [], candy: [], turnstile: [], cart: [], sign: [] };
+    this.phase = 1;
     this.reset();
   }
 
@@ -356,6 +414,11 @@ class ObstacleSpawner {
     this.distanceSinceSpawn = 0;
     this.nextGap = DIFFICULTY.GAP_START;
     this.lastPattern = null;
+  }
+
+  /** Switch which PATTERNS are in rotation (see GameScene.enterPhase2()). */
+  setPhase(phase) {
+    this.phase = phase;
   }
 
   /**
@@ -392,11 +455,12 @@ class ObstacleSpawner {
     this.lastPattern = pattern.name;
   }
 
-  /** Weighted pick among the patterns unlocked at this intensity. */
+  /** Weighted pick among the current phase's patterns unlocked at this intensity. */
   pickPattern(intensity) {
     const usable = PATTERNS.filter((p) =>
+      (p.phase || 1) === this.phase &&
       intensity >= (p.minI || 0) && intensity <= (p.maxI !== undefined ? p.maxI : 1));
-    if (!usable.length) return PATTERNS[0];
+    if (!usable.length) return PATTERNS.find((p) => (p.phase || 1) === this.phase) || PATTERNS[0];
 
     // Mild anti-repeat so the same phrase rarely plays twice in a row.
     const weights = usable.map((p) => (p.name === this.lastPattern ? p.weight * 0.4 : p.weight));
@@ -417,7 +481,7 @@ class ObstacleSpawner {
   maybeSpawnCandy(placed, intensity, arc, speed) {
     if (!CANDY.ENABLED || intensity < CANDY.MIN_INTENSITY) return;
     if (Math.random() > CANDY.CHANCE) return;
-    const target = placed.find((p) => p.item.type !== 'idol-high');
+    const target = placed.find((p) => p.item.type !== 'idol-high' && p.item.type !== 'sign');
     if (!target) return;
     const candy = this.obtain('candy', target.x - arc * 0.06, GAME.GROUND_Y - CANDY.HEIGHT, speed);
     this.candyGroup.add(candy);
@@ -437,6 +501,9 @@ class ObstacleSpawner {
     let obj;
     if (type === 'kimchi') obj = new KimchiJar(this.scene, x);
     else if (type === 'spike') obj = new Spikes(this.scene, x);
+    else if (type === 'turnstile') obj = new Turnstile(this.scene, x);
+    else if (type === 'cart') obj = new LuggageCart(this.scene, x);
+    else if (type === 'sign') obj = new HangingSign(this.scene, x);
     else if (poolKey === 'candy') obj = new Candy(this.scene, x, y);
     else obj = new IdolDancer(this.scene, x, speed, forceHigh);
     pool.push(obj);

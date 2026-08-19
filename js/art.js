@@ -378,6 +378,50 @@ const PlaceholderArt = (function () {
     }
   }
 
+  /* --- phase 2 (subway) obstacles ---------------------------------------- */
+
+  /* TURNSTILE -- 32x36 design, ground obstacle (jump). A waist-high gate;
+   * the swing arm bobs a px between frames like the kimchi jar's wobble. */
+  function drawTurnstile(c, f) {
+    const P = SUBWAY;
+    r(c, 2, 4, 5, 30, P.pillar);
+    r(c, 25, 4, 5, 30, P.pillar);
+    r(c, 3, 8, 4, 6, P.signBg);                       // card reader
+    const armY = 14 + (f ? 1 : 0);
+    r(c, 6, armY, 20, 4, P.platformEdge);              // hazard-yellow arm
+    for (let x = 6; x < 26; x += 6) r(c, x, armY, 3, 4, '#1a1014');
+    r(c, 0, 32, 32, 4, P.pillarDark);                  // base plate
+  }
+
+  /* LUGGAGE CART -- 44x28 design, ground obstacle (jump), wider than the
+   * turnstile. Frame 1 nudges the top suitcase, just enough visual life to
+   * not read as a static prop. */
+  function drawCart(c, f) {
+    const P = SUBWAY;
+    circle(c, 8, 25, 3, '#1a1014'); circle(c, 36, 25, 3, '#1a1014');
+    r(c, 2, 20, 40, 4, P.pillarDark);                  // bed
+    r(c, 2, 6, 3, 16, P.pillar);                        // handle
+    r(c, 8, 10 + (f ? 1 : 0), 14, 10, '#8f2f1e');       // suitcase
+    r(c, 24, 6, 12, 14, P.wallTrim);                    // suitcase
+    r(c, 24, 6, 12, 2, P.platformEdge);                 // strap
+  }
+
+  /* HANGING SIGN -- 40x48 design (same grid as the idol), duck obstacle.
+   * A dot-matrix departure board; the lit dots shift a step between frames
+   * so it reads as an active display rather than a flat sticker. */
+  function drawSign(c, f) {
+    const P = SUBWAY;
+    r(c, 19, 0, 2, 8, P.pillar);                        // hanger rod
+    r(c, 4, 8, 32, 20, P.signBg);
+    r(c, 4, 8, 32, 3, P.wallTrim);                       // top trim
+    for (let row = 0; row < 2; row++) {
+      for (let col = 0; col < 8; col++) {
+        if ((col + row + f) % 3 !== 0) r(c, 7 + col * 3, 14 + row * 5, 2, 2, P.signText);
+      }
+    }
+    r(c, 8, 28, 3, 10, P.pillar); r(c, 29, 28, 3, 10, P.pillar);  // support legs
+  }
+
   function drawDust(c) { r(c, 0, 0, 6, 6, '#e8d5f2'); }
 
   /* CANDY -- 28x28 design, a lollipop. Frame 1 rotates the swirl a little. */
@@ -413,7 +457,7 @@ const PlaceholderArt = (function () {
   const DRAWERS = {
     girl: drawGirl, ahn: drawAhn, kimchi: drawKimchi, spike: drawSpike,
     idol: drawIdol, candy: drawCandy, dust: drawDust, drop: drawDrop, streak: drawStreak,
-    heart: drawHeart,
+    heart: drawHeart, turnstile: drawTurnstile, cart: drawCart, sign: drawSign,
   };
 
   /**
@@ -434,6 +478,159 @@ const PlaceholderArt = (function () {
     ctx.fillRect(0, 0, w, h);
     tex.refresh();
     return tex;
+  }
+
+  /**
+   * Phase 2's backdrop: a Seoul subway platform, built at the exact pixel
+   * size of the street's far/near layers (BG_SRC) so Backdrop's existing
+   * scale/split math shows it with no changes -- Backdrop.setLayers() just
+   * repoints the same two tileSprites at these keys.
+   *
+   * Drawn flat + keylined, unlike the street's painted photo, on purpose:
+   * the palette/style shift is what sells "somewhere new" the instant it
+   * swaps in, before the player has registered a single new obstacle shape.
+   * Every repeating element (tile grid, pillars, floor seams) sits on a
+   * period that divides BG_SRC.W evenly, so the horizontal tiling loops
+   * with no seam.
+   *
+   * The far layer is built TWICE -- once with its tunnel recesses empty,
+   * once with them lit up as a passing train -- rather than painting one
+   * shared texture in place and toggling it. A TileSprite bakes its source
+   * into an internal repeating pattern at setTexture() time and does not
+   * reliably re-bake just because the source texture's pixels changed
+   * underneath it; a genuine key swap (Backdrop.setFarTrainFlash()) is what
+   * a WebGL TileSprite is guaranteed to pick up.
+   */
+  const SUBWAY_BAY = 224;                     // 1344 / 224 = 6, divides evenly
+  const SUBWAY_RECESS = { x: 96, y: 40, w: 128, hInset: 100 };  // within each bay
+
+  function buildSubwayBackdrop(scene) {
+    const P = SUBWAY;
+    const FW = BG_SRC.W, FH = BG_SRC.SPLIT_Y;               // 1344 x 504
+    const NH = BG_SRC.H - BG_SRC.SPLIT_Y;                   // 264
+
+    // ---- FAR: tiled wall, pillars, ceiling lights, a recess that's either
+    // empty or lit up with a passing train -------------------------------
+    const buildFar = (key, withTrain) => {
+      if (scene.textures.exists(key)) scene.textures.remove(key);
+      const tex = scene.textures.createCanvas(key, FW, FH);
+      const fc = tex.getContext();
+      fc.imageSmoothingEnabled = false;
+
+      fc.fillStyle = P.ceilingDark; fc.fillRect(0, 0, FW, FH);
+
+      const TILE = 28;                                      // 1344 / 28 = 48, divides evenly
+      for (let y = 40; y < FH - 20; y += TILE) {
+        for (let x = 0; x < FW; x += TILE) {
+          fc.fillStyle = ((x / TILE + y / TILE) % 2 === 0) ? P.wallTile : P.wallTileDark;
+          fc.fillRect(x, y, TILE - 1, TILE - 1);
+        }
+      }
+      fc.fillStyle = P.wallTrim; fc.fillRect(0, 180, FW, 14);  // metro-line colour band
+
+      const R = SUBWAY_RECESS, rh = FH - R.hInset;
+      for (let x = 0; x < FW; x += SUBWAY_BAY) {
+        fc.fillStyle = P.pillar; fc.fillRect(x + 20, 10, 26, FH - 30);
+        fc.fillStyle = P.pillarDark; fc.fillRect(x + 20, 10, 6, FH - 30);
+        fc.fillStyle = P.lightGlow; fc.fillRect(x + 70, 4, 60, 8);   // ceiling fixture
+
+        const rx = x + R.x, ry = R.y;
+        fc.fillStyle = '#05070a';
+        fc.fillRect(rx, ry, R.w, rh);
+        if (!withTrain) continue;
+        fc.fillStyle = P.trainBody;
+        fc.fillRect(rx, ry + rh * 0.28, R.w, rh * 0.55);
+        fc.fillStyle = P.trainWindow;
+        for (let wx = rx + 6; wx < rx + R.w - 6; wx += 18) {
+          fc.fillRect(wx, ry + rh * 0.36, 12, rh * 0.22);
+        }
+        fc.fillStyle = P.lightGlow;
+        fc.fillRect(rx, ry + rh * 0.14, R.w, 4);              // headlight streak up top
+      }
+      tex.refresh();
+    };
+    buildFar(BACKGROUND.SUBWAY_FAR.key, false);
+    buildFar(BACKGROUND.SUBWAY_FAR_TRAIN.key, true);
+
+    // ---- NEAR: the platform floor, scrolling under her feet at full speed
+    const nearKey = BACKGROUND.SUBWAY_NEAR.key;
+    if (scene.textures.exists(nearKey)) scene.textures.remove(nearKey);
+    const nearTex = scene.textures.createCanvas(nearKey, FW, NH);
+    const nc = nearTex.getContext();
+    nc.imageSmoothingEnabled = false;
+
+    nc.fillStyle = P.platformFloor; nc.fillRect(0, 0, FW, NH);
+    nc.fillStyle = P.platformEdge; nc.fillRect(0, 0, FW, 10);            // tactile warning strip
+    nc.fillStyle = P.pillarDark; nc.fillRect(0, 10, FW, 4);
+    const SEAM = 56;                                        // 1344 / 56 = 24, divides evenly
+    nc.fillStyle = 'rgba(0,0,0,0.18)';
+    for (let x = 0; x < FW; x += SEAM) nc.fillRect(x, 14, 2, NH - 14);   // floor tile seams
+    nearTex.refresh();
+  }
+
+  /**
+   * The station-entrance archway shown briefly in GameScene's phase-2 intro
+   * (Nina runs into it and "descends" out of frame as the world changes
+   * underneath). A stylised, flat-shaded nod to the ornate ironwork transit
+   * entrances of old -- twin lamps, a curved arch, a roundel sign -- redrawn
+   * in the same simple-shapes-plus-keyline language as every other
+   * placeholder here, not a copy of any one real entrance. Drawn once at
+   * final size (it is a one-off prop, not an animated spritesheet).
+   */
+  function buildMetroEntrance(scene, key) {
+    if (scene.textures.exists(key)) scene.textures.remove(key);
+    const W = 150, H = 190;
+    const tex = scene.textures.createCanvas(key, W, H);
+    const c = tex.getContext();
+    c.imageSmoothingEnabled = false;
+    const P = SUBWAY;
+
+    // Staircase, receding down into the ground -- drawn first so the arch
+    // and its posts sit in front of it.
+    for (let i = 0; i < 7; i++) {
+      const sy = H - 6 - i * 9;
+      c.fillStyle = (i % 2 === 0) ? '#0a0d10' : '#161d22';
+      c.fillRect(28, sy, 94, 9);
+    }
+
+    // Twin posts.
+    c.fillStyle = P.archGreen;
+    c.fillRect(16, 44, 11, 106);
+    c.fillRect(123, 44, 11, 106);
+    c.fillStyle = P.archGreenDark;
+    c.fillRect(16, 44, 4, 106);
+    c.fillRect(123, 44, 4, 106);
+
+    // Curled tops -- an approximation of ironwork scrollwork, not a trace.
+    c.fillStyle = P.archGreen;
+    c.beginPath();
+    c.moveTo(21, 46); c.quadraticCurveTo(6, 14, 42, 10); c.lineTo(42, 20);
+    c.quadraticCurveTo(20, 24, 21, 46); c.closePath(); c.fill();
+    c.beginPath();
+    c.moveTo(129, 46); c.quadraticCurveTo(144, 14, 108, 10); c.lineTo(108, 20);
+    c.quadraticCurveTo(130, 24, 129, 46); c.closePath(); c.fill();
+
+    // Arch bar joining the posts, and the sign it carries.
+    c.fillStyle = P.archGreen; c.fillRect(16, 44, 118, 8);
+    c.fillStyle = P.signPlate; c.fillRect(38, 16, 74, 24);
+    c.fillStyle = P.archGreenDark; c.fillRect(38, 16, 74, 3);
+    c.fillRect(38, 37, 74, 3); c.fillRect(38, 16, 3, 24); c.fillRect(109, 16, 3, 24);
+
+    // A roundel "M" on the sign -- reuses the 3x5 font's existing M glyph,
+    // scaled up via a context transform (fillRect stays crisp under scale).
+    c.save();
+    c.translate(66, 20);
+    c.scale(3, 3);
+    pixelText(c, 0, 0, 'M', P.archGreenDark);
+    c.restore();
+
+    // Lamp globes on top of each post.
+    circle(c, 21, 12, 7, P.archLamp);
+    circle(c, 129, 12, 7, P.archLamp);
+    circle(c, 21, 12, 3, P.lightGlow);
+    circle(c, 129, 12, 3, P.lightGlow);
+
+    tex.refresh();
   }
 
   /* ==================================================================
@@ -458,6 +655,8 @@ const PlaceholderArt = (function () {
   /** Build every texture that is not a plain loaded spritesheet. */
   function buildAll(scene) {
     buildVignette(scene, 'vignette', GAME.WIDTH, GAME.HEIGHT);
+    buildSubwayBackdrop(scene);
+    buildMetroEntrance(scene, PHASE2.ENTRANCE_KEY);
     Object.keys(ASSETS).forEach((name) => {
       const a = ASSETS[name];
       if (a.path) return;                       // loaded by BootScene instead

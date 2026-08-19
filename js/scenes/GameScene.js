@@ -30,6 +30,9 @@ class GameScene extends Phaser.Scene {
     this.speedBoost = 0;      // sugar rush, as a fraction of base speed (see CANDY)
     this.running = true;
     this.isOver = false;
+    this.phase = 1;
+    this.transitioning = false;  // true during playSubwayEntrance()'s cutscene
+    this.godMode = false;     // dev cheat, see bindInput()
 
     this.buildWorld();
     this.buildEntities();
@@ -192,6 +195,12 @@ class GameScene extends Phaser.Scene {
     this.warnText = this.add.text(GAME.WIDTH / 2, 40, '', {
       fontFamily: F, fontSize: '38px', color: '#ffd84a', stroke: '#2b0d1c', strokeThickness: 7,
     }).setOrigin(0.5, 0).setDepth(101).setAlpha(0);
+
+    // Dev cheat indicator (see cheatToggleGodMode()). Off by default.
+    this.godModeText = this.add.text(GAME.WIDTH / 2, GAME.HEIGHT - 16,
+      'GOD MODE -- hold → to fast-forward', {
+        fontFamily: F, fontSize: '14px', color: '#ffe066', stroke: '#2b0d1c', strokeThickness: 3,
+      }).setOrigin(0.5, 1).setDepth(101).setAlpha(0);
   }
 
   buildOverlays() {
@@ -255,9 +264,10 @@ class GameScene extends Phaser.Scene {
       w: Phaser.Input.Keyboard.KeyCodes.W,
       down: Phaser.Input.Keyboard.KeyCodes.DOWN,
       s: Phaser.Input.Keyboard.KeyCodes.S,
+      right: Phaser.Input.Keyboard.KeyCodes.RIGHT,   // held during god mode -- see update()
     });
 
-    const jumpDown = () => { Sfx.unlock(); this.player.requestJump(); };
+    const jumpDown = () => { Sfx.unlock(); if (!this.transitioning) this.player.requestJump(); };
     const jumpUp = () => this.player.releaseJump();
     kb.on('keydown-SPACE', jumpDown); kb.on('keydown-UP', jumpDown); kb.on('keydown-W', jumpDown);
     kb.on('keyup-SPACE', jumpUp);     kb.on('keyup-UP', jumpUp);     kb.on('keyup-W', jumpUp);
@@ -266,10 +276,33 @@ class GameScene extends Phaser.Scene {
      * scene-level 'keydown-P' can pause the game but can never un-pause it.
      * Same reason the resume tap is a window listener. Both are torn down on
      * shutdown so restarts do not stack them up. */
+    // Dev cheats, also bound at the window level: up up down down left right
+    // (the Konami code) toggles god mode -- intangible, nothing can hit her --
+    // and while it's on, holding -> floors the world speed, so a run can be
+    // fast-forwarded up to PHASE2.SCORE_THRESHOLD to test it without dying
+    // along the way. '/' ends the run instantly, for testing game-over.
+    // Neither is gated behind a URL flag; the arrow sequence is obscure
+    // enough not to trigger by accident, and left/right aren't used for
+    // anything else in this game outside god mode.
+    const CHEAT_SEQUENCE = ['up', 'up', 'down', 'down', 'left', 'right'];
+    const ARROW_NAMES = { arrowup: 'up', arrowdown: 'down', arrowleft: 'left', arrowright: 'right' };
+    this.cheatBuffer = [];
+
     this.onWindowKey = (e) => {
       const k = (e.key || '').toLowerCase();
       if (k === 'p') { e.preventDefault(); this.togglePause(); }
       else if (k === 'm') Sfx.toggleMute();
+      else if (k === '/') { e.preventDefault(); this.cheatInstantLose(); }
+
+      const arrow = ARROW_NAMES[k];
+      if (!arrow) return;
+      this.cheatBuffer.push(arrow);
+      if (this.cheatBuffer.length > CHEAT_SEQUENCE.length) this.cheatBuffer.shift();
+      if (this.cheatBuffer.length === CHEAT_SEQUENCE.length &&
+          this.cheatBuffer.every((v, i) => v === CHEAT_SEQUENCE[i])) {
+        this.cheatBuffer.length = 0;
+        this.cheatToggleGodMode();
+      }
     };
     this.onWindowPointer = () => {
       if (!this.isOver && this.scene.isPaused()) this.scene.resume();
@@ -288,7 +321,7 @@ class GameScene extends Phaser.Scene {
 
     this.input.on('pointerdown', (p) => {
       Sfx.unlock();
-      if (this.isOver) return;
+      if (this.isOver || this.transitioning) return;
       this.touch = { downAt: this.time.now, downY: p.y, swiped: false, active: true };
       this.player.requestJump();
     });
@@ -341,6 +374,34 @@ class GameScene extends Phaser.Scene {
     if (this.scene.isPaused()) this.scene.resume(); else this.scene.pause();
   }
 
+  /* ---- dev cheats, see bindInput() ------------------------------------ */
+
+  /** '/' -- end the run immediately, for testing the game-over screen. */
+  cheatInstantLose() {
+    if (this.isOver) return;
+    this.lives = 0;
+    this.refreshHearts();
+    this.gameOver();
+  }
+
+  /** Konami-ish arrow sequence -- toggle god mode: intangible (see the
+   * guards in applyHit()/onObstacleHit()), tinted gold so it is obvious on
+   * screen, and while it's on, holding -> floors the world speed (see
+   * update()) so a run can be fast-forwarded up to PHASE2.SCORE_THRESHOLD
+   * without needing to dodge anything on the way there. */
+  cheatToggleGodMode() {
+    if (this.isOver) return;
+    this.godMode = !this.godMode;
+    this.cameras.main.flash(200, 255, 255, 255);
+    if (this.godMode) {
+      this.player.setTint(0xffe066);
+      this.godModeText.setAlpha(1);
+    } else {
+      this.player.clearTint();
+      this.godModeText.setAlpha(0);
+    }
+  }
+
   /* ==================================================================
    * MAIN LOOP
    * ================================================================== */
@@ -363,6 +424,10 @@ class GameScene extends Phaser.Scene {
       this.speedBoost = Math.max(0, this.speedBoost - CANDY.BOOST_DECAY * dt);
       const baseSpeed = Phaser.Math.Linear(DIFFICULTY.SPEED_START, DIFFICULTY.SPEED_MAX, this.intensity);
       this.speed = baseSpeed * (1 + this.speedBoost);
+
+      // Dev cheat: god mode + holding right floors the world speed, to
+      // fast-forward a run up to PHASE2.SCORE_THRESHOLD for testing.
+      if (this.godMode && this.keys.right.isDown) this.speed = CHEATS.FF_SPEED;
 
       const dDist = this.speed * dt;
       this.distance += dDist;
@@ -393,6 +458,7 @@ class GameScene extends Phaser.Scene {
       if (this.multiplier > 1 && (time - this.lastNearMissAt) > SCORE.MULT_DECAY_DELAY) {
         this.multiplier = Math.max(1, this.multiplier - SCORE.MULT_DECAY_RATE * dt);
       }
+      if (this.phase === 1 && this.score >= PHASE2.SCORE_THRESHOLD) this.enterPhase2();
 
       /* --- 5. CHARACTERS -------------------------------------------- */
       // Sell the acceleration: the run cycle plays faster as the world does.
@@ -561,7 +627,7 @@ class GameScene extends Phaser.Scene {
    * DAMAGE
    * ================================================================== */
   onObstacleHit(player, obstacle) {
-    if (this.isOver || obstacle.hitAlready || !obstacle.active) return;
+    if (this.isOver || this.godMode || obstacle.hitAlready || !obstacle.active) return;
 
     // Mark it resolved BEFORE the mercy check. Otherwise an obstacle you walk
     // straight through while invulnerable stays unresolved and later scores a
@@ -572,6 +638,7 @@ class GameScene extends Phaser.Scene {
 
   /** One place where a hit is resolved, whatever caused it. */
   applyHit(fxX, fxY) {
+    if (this.godMode) return;                   // dev cheat: intangible, see bindInput()
     if (!this.player.takeHit()) return;        // mercy invulnerability swallowed it
 
     this.hits += 1;
@@ -590,6 +657,104 @@ class GameScene extends Phaser.Scene {
     this.ahn.x += AHN.HIT_PUSH * 0.6;
 
     if (this.lives <= 0) this.gameOver();
+  }
+
+  /* ==================================================================
+   * PHASE 2  --  the Seoul subway (PHASE2.SCORE_THRESHOLD)
+   * ------------------------------------------------------------------
+   * A reskin + a new obstacle vocabulary, not a new ruleset: AHN, scoring
+   * and the difficulty ramp are untouched. Fires once, from the score
+   * check in update().
+   * ================================================================== */
+  enterPhase2() {
+    if (this.phase === 2) return;
+    this.phase = 2;
+    this.spawner.setPhase(2);
+
+    this.playSubwayEntrance(() => {
+      this.cameras.main.flash(280, 255, 255, 255);
+      this.cameras.main.shake(220, 0.01);
+      // Swap mid-flash so the hard cut is masked rather than a visible pop.
+      this.time.delayedCall(120, () => {
+        this.backdrop.setLayers(BACKGROUND.SUBWAY_FAR, BACKGROUND.SUBWAY_NEAR);
+      });
+      this.showPhaseBanner(PHASE2.BANNER_TITLE, PHASE2.BANNER_SUB);
+      this.scheduleTrainPass();
+    });
+  }
+
+  /**
+   * She runs up to the station archway and "descends" -- sinks, shrinks and
+   * fades -- before onDone swaps the world underneath her. The run is
+   * frozen for the duration: obstacles, scoring and AHN all gate on
+   * `running`, so borrowing that flag is enough to make sure nothing spawns
+   * or connects mid-cutscene. Her Arcade body is disabled so the tweens
+   * below can drive her transform directly without physics fighting them.
+   */
+  playSubwayEntrance(onDone) {
+    this.running = false;
+    this.transitioning = true;
+    this.player.body.setVelocity(0, 0);
+    this.player.body.enable = false;
+
+    const groundY = GAME.GROUND_Y;
+    const entrance = this.add.image(this.player.x + 90, groundY, PHASE2.ENTRANCE_KEY)
+      .setOrigin(0.5, 1).setDepth(19).setAlpha(0).setScale(0.7);
+    this.tweens.add({ targets: entrance, alpha: 1, scale: 1, duration: 200, ease: 'Back.easeOut' });
+
+    this.player.play('girl-run');
+    this.tweens.add({
+      targets: this.player, x: entrance.x - 8, duration: PHASE2.ENTRANCE_RUN_MS, ease: 'Sine.easeIn',
+      onComplete: () => {
+        this.spawnDust(this.player.x, groundY, 8);
+        this.tweens.add({
+          targets: this.player, y: groundY + 46, scaleX: 0.5, scaleY: 0.5, alpha: 0,
+          duration: PHASE2.ENTRANCE_DESCEND_MS, ease: 'Sine.easeIn',
+          onComplete: () => {
+            entrance.destroy();
+            this.player.setPosition(PLAYER.X, groundY).setScale(1).setAlpha(1);
+            this.player.body.enable = true;
+            this.running = true;
+            this.transitioning = false;
+            if (onDone) onDone();
+          },
+        });
+      },
+    });
+  }
+
+  /** "A train just rushed past": lights up the tunnel recesses for
+   * PHASE2.TRAIN_FLASH_MS, then goes dark and reschedules itself on a
+   * random gap. Purely ambient -- no gameplay effect. Stops naturally once
+   * the run ends, since a fresh scene start tears down its own timers. */
+  scheduleTrainPass() {
+    const delay = Phaser.Math.Between(PHASE2.TRAIN_GAP_MIN_MS, PHASE2.TRAIN_GAP_MAX_MS);
+    this.time.delayedCall(delay, () => {
+      if (this.phase !== 2 || this.isOver) return;
+      this.backdrop.setFarTrainFlash(true);
+      this.cameras.main.shake(140, 0.003);
+      this.time.delayedCall(PHASE2.TRAIN_FLASH_MS, () => {
+        this.backdrop.setFarTrainFlash(false);
+        this.scheduleTrainPass();
+      });
+    });
+  }
+
+  showPhaseBanner(title, sub) {
+    const F = 'Trebuchet MS, sans-serif';
+    const banner = this.add.container(GAME.WIDTH / 2, GAME.HEIGHT / 2 - 40).setDepth(150).setAlpha(0);
+    banner.add(this.add.rectangle(0, 0, GAME.WIDTH, 110, 0x0d0710, 0.75));
+    banner.add(this.add.text(0, -14, title, {
+      fontFamily: F, fontSize: '44px', color: PAL.uiAccent, stroke: '#2b0d1c', strokeThickness: 8,
+    }).setOrigin(0.5));
+    banner.add(this.add.text(0, 26, sub, {
+      fontFamily: F, fontSize: '16px', color: '#d9c3e8',
+    }).setOrigin(0.5));
+
+    this.tweens.add({
+      targets: banner, alpha: 1, duration: 260, yoyo: true, hold: 1400, ease: 'Sine.easeInOut',
+      onComplete: () => banner.destroy(),
+    });
   }
 
   /* ==================================================================
