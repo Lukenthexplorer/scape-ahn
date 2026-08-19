@@ -1,0 +1,14 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Python (asset-generation tools)
+__pycache__/
+*.pyc
+.venv/
+venv/

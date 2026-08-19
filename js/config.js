@@ -103,14 +103,15 @@ const PLAYER = {
   HIT_KNOCK_MS: 320,      // Stagger duration after a hit (visual only).
 
   // Collision boxes in FINAL frame px (frame is 96x128, origin at the feet).
-  // Measured against the real run art at ASSETS.girl.sourceScale 0.7, which
-  // puts her silhouette at frame y 64..127, x 27..66. Deliberately narrower
-  // than the sprite -- the ponytail and trailing arm are not solid, and
-  // generous hitboxes are what make an endless runner feel fair at speed.
-  BODY_STAND: { w: 28, h: 60, ox: 32, oy: 67 },
+  // Measured against the real run art at ASSETS.girl.sourceScaleX/Y
+  // (0.90 / 0.58), which puts her silhouette at frame y 76..127, x 28..64.
+  // Deliberately narrower than the sprite -- the ponytail and trailing arm
+  // are not solid, and generous hitboxes are what make an endless runner
+  // feel fair at speed.
+  BODY_STAND: { w: 36, h: 51, ox: 28, oy: 76 },
   // The duck frames are the run art squashed to 55% height (ASSETS.girl
-  // .compose), putting her silhouette at frame y 92..127.
-  BODY_DUCK:  { w: 32, h: 34, ox: 30, oy: 93 },
+  // .compose), putting her silhouette at frame y 98..127.
+  BODY_DUCK:  { w: 41, h: 29, ox: 26, oy: 98 },
 };
 
 /* ---------------------------------------------------------------------
@@ -254,13 +255,13 @@ const OBSTACLES = {
     //             jump also clears her, and scores a near miss -- skill option)
     //   'low'  -> drops into a wide floor pose    -> JUMP over
     highChance: 0.5,
-    highY: 23,            // Px the HIGH idol's feet float above the ground.
+    highY: 17,            // Px the HIGH idol's feet float above the ground.
                           // TUNED, DO NOT EYEBALL: it puts her hitbox bottom at
-                          // GROUND_Y-47, inside the window between a standing
-                          // player's head (GROUND_Y-60) and a ducking player's
-                          // head (GROUND_Y-34) -- ~13px of margin either way.
+                          // GROUND_Y-41, inside the window between a standing
+                          // player's head (GROUND_Y-52) and a ducking player's
+                          // head (GROUND_Y-30) -- ~11px of margin either way.
                           // Re-derive if you touch BODY_STAND, BODY_DUCK,
-                          // ASSETS.girl.sourceScale or the idol frame height.
+                          // ASSETS.girl.sourceScaleX/Y or the idol frame height.
     bodyHigh: { w: 60, h: 60, ox: 10, oy: 12 },
     bodyLow:  { w: 52, h: 60, ox: 14, oy: 36 },
     // Choreography: side-step -> pose -> settle into blocking position.
@@ -419,12 +420,17 @@ const ASSETS = {
     key: 'girl',
     path: null,           // set this instead to use a single packed spritesheet
     frameWidth: 96, frameHeight: 128, frameCount: 9, artScale: 2,
-    // She is drawn at 70% of her source size so AHN reads as a giant next to
-    // her (~59px tall against his ~148px). Smoothly downscaled first, then
-    // upscaled 2x by artScale, so she stays on the same pixel grid as him --
-    // see `resampled` in art.js. The frame keeps its size; she just occupies
-    // less of it, which is why the body boxes below are re-measured.
-    sourceScale: 0.7,
+    // She is drawn well under her source size so AHN reads as a giant next to
+    // her. Smoothly downscaled first, then upscaled 2x by artScale, so she
+    // stays on the same pixel grid as him -- see `resampled` in art.js. The
+    // frame keeps its size; she just occupies less of it, which is why the
+    // body boxes below are re-measured.
+    //
+    // X and Y are scaled unevenly on purpose: shorter than the old uniform
+    // 0.7 (a "squish") and noticeably wider (a stocky, chubby stance), which
+    // reads as a rounder silhouette instead of a plain shrink.
+    sourceScaleX: 0.90,
+    sourceScaleY: 0.58,
     sources: {
       run: [
         'assets/sprites/16-bit_pixel_art_character_sprite/Idle/animations/Running/south-east/frame_000.png',

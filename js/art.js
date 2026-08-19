@@ -126,7 +126,10 @@ const PlaceholderArt = (function () {
    * ================================================================== */
 
   /**
-   * Resample a source image to `k` times its size, with smoothing ON.
+   * Resample a source image to `kx` x `ky` times its size, with smoothing ON.
+   * `ky` defaults to `kx` for a uniform resize; passing both independently is
+   * how a character gets squashed/widened without distorting the source
+   * pixel grid.
    *
    * This is a deliberate two-step: shrink smoothly here, then let the strip's
    * integer artScale blow the result back up with smoothing OFF. Doing it in
@@ -135,10 +138,11 @@ const PlaceholderArt = (function () {
    * Two steps give a clean sprite that still sits on the same pixel grid as
    * everything else in the game.
    */
-  function resampled(img, k) {
+  function resampled(img, kx, ky) {
+    if (ky == null) ky = kx;
     const cv = document.createElement('canvas');
-    cv.width = Math.max(1, Math.round(img.width * k));
-    cv.height = Math.max(1, Math.round(img.height * k));
+    cv.width = Math.max(1, Math.round(img.width * kx));
+    cv.height = Math.max(1, Math.round(img.height * ky));
     const c = cv.getContext('2d');
     c.imageSmoothingEnabled = true;
     c.imageSmoothingQuality = 'high';
@@ -185,9 +189,10 @@ const PlaceholderArt = (function () {
    *   squashY  - vertical scale, still bottom-aligned (duck poses)
    *   tint     - flat colour burn (hurt pose)
    *
-   * The asset-level `sourceScale` resizes the source art before any of that,
-   * which is how a character can be made smaller than its source files
-   * without leaving the pixel grid (see `resampled`).
+   * The asset-level `sourceScale` (or the `sourceScaleX`/`sourceScaleY` pair,
+   * for a non-uniform squash/widen) resizes the source art before any of
+   * that, which is how a character can be made smaller -- or stockier --
+   * than its source files without leaving the pixel grid (see `resampled`).
    */
   function drawComposed(scene, asset, ctx, i, fw, fh) {
     const spec = asset.compose[i];
@@ -197,7 +202,9 @@ const PlaceholderArt = (function () {
     if (!scene.textures.exists(key)) return false;      // file missing -> placeholder
 
     let img = scene.textures.get(key).getSourceImage();
-    if (asset.sourceScale && asset.sourceScale !== 1) img = resampled(img, asset.sourceScale);
+    const sx = asset.sourceScaleX || asset.sourceScale;
+    const sy = asset.sourceScaleY || asset.sourceScale;
+    if ((sx && sx !== 1) || (sy && sy !== 1)) img = resampled(img, sx || 1, sy || 1);
     if (spec.rotate) img = rotated(img, spec.rotate);
     const sw = img.width, sh = img.height;
     if (spec.tint) img = tinted(img, spec.tint, spec.tintAlpha != null ? spec.tintAlpha : 0.5);
