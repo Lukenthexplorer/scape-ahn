@@ -236,15 +236,28 @@ tools/                asset generators (Python + Pillow)
 
 ## AHN's look
 
-His head is the reference photo at **full resolution**, deliberately oversized
-(60x76 against a 176px body, where a human head would be ~13% of their height).
-The body is drawn on the same 2px pixel grid as Nina; the head is not pixelated
-at all. That mismatch is the joke, not a bug -- don't "fix" it by downsampling
-the face.
+AHN is a **procedural placeholder**, drawn in `art.js` (`drawAhn`) on the same
+2px pixel grid as Nina, following the look the comic panels establish: dark
+swept hair, round glasses, a grin far too wide, lanky candy-cane body.
 
-Two resolutions coexist in one sheet because the body is drawn first in pixel
-blocks and the photo is composited over it afterwards, at final size. See the
-header comment in `tools/make_ahn_sheet.py`.
+His head is deliberately oversized -- roughly 43% of his height, where a human
+head is ~13%. That disproportion is the joke, not a bug.
+
+Two things in that drawing are load-bearing and easy to break:
+
+- The **brows are kept a pixel clear of the glasses rims**. Let them touch and
+  the two merge into one dark band and the face loses all expression.
+- The **deep pratfall (frame 6) is drawn, not rotated**. Rotating a 66px body
+  about its feet swings the head 40+px sideways, straight out of a 56px frame.
+  The two mild stumbles rotate; the full faceplant is its own pose.
+
+To swap in the real sprite: set `ASSETS.ahn.path` to a 9-frame sheet with
+112x176 frames in the same order (0-3 run, 4-5 stumble, 6 sprawled, 7-8 catch)
+and drop `artScale` from that entry. Nothing else changes.
+
+`tools/make_ahn_sheet.py` builds an alternative sheet with a real photo as the
+head, composited at full resolution over the pixel body. It is **not wired in**
+-- see the note at the top of that file if you want it back.
 
 ## Notes for the next iteration
 

@@ -1,7 +1,15 @@
 #!/usr/bin/env python3
 """
-SCAPE AHN!  --  AHN spritesheet generator
-=========================================
+SCAPE AHN!  --  AHN spritesheet generator  [NOT WIRED IN BY DEFAULT]
+====================================================================
+AHN is currently drawn procedurally in js/art.js (ASSETS.ahn.path is null),
+following the comic panels. This script builds the older photo-headed sheet
+instead. To use it: run it, then set
+
+    ASSETS.ahn.path = 'assets/sprites/ahn/ahn.png'
+
+and drop `artScale` from that entry.
+
 Builds assets/sprites/ahn/ahn.png : a 9-frame horizontal spritesheet that
 matches the ASSETS.ahn entry in js/config.js.
 

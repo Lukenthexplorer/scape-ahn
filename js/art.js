@@ -259,49 +259,155 @@ const PlaceholderArt = (function () {
     }
   }
 
-  /* AHN fallback -- only used if assets/sprites/ahn/ahn.png is missing.
-   * Drawn at 48x72 to match the generated sheet. */
+  /* ==================================================================
+   * AHN  --  56x88 design grid (112x176 final at artScale 2).
+   * frames: 0-3 run | 4-5 stumble | 6 sprawled | 7-8 catch
+   *
+   * Follows the comic panels: dark swept hair, round glasses, a grin far too
+   * wide, and a lanky candy-cane body. The head is deliberately oversized --
+   * roughly 43% of his height against a human's ~13%. That is the joke, so
+   * do not "correct" the proportions.
+   *
+   * Note the deep pratfall (frame 6) is DRAWN, not rotated. Rotating a 66px
+   * body about its feet swings the head 40+px sideways, straight out of a
+   * 56px frame; the mild stumbles rotate, the full fall is its own pose.
+   * ================================================================== */
+  function drawAhnHead(c, hx, hy, opts) {
+    const P = PAL;
+    const grin = (opts && opts.grin) || 1;      // 1 = normal, >1 = manic
+    const dazed = opts && opts.dazed;
+
+    r(c, hx + 2, hy + 9, 26, 26, P.ahnSkin);          // face
+    r(c, hx, hy + 15, 2, 12, P.ahnSkin);              // ears
+    r(c, hx + 28, hy + 15, 2, 12, P.ahnSkin);
+    r(c, hx + 3, hy + 32, 24, 3, P.ahnSkinShade);     // jaw shading
+    r(c, hx + 4, hy + 35, 22, 2, P.ahnSkinShade);     // chin
+
+    // Hair: a real mass of it, swept up and back off a widow's peak. Thin
+    // hair on a head this big just reads as a pale mask.
+    r(c, hx + 1, hy + 2, 28, 11, P.ahnHair);
+    r(c, hx + 3, hy, 24, 3, P.ahnHair);               // crown
+    r(c, hx, hy + 8, 4, 12, P.ahnHair);               // sideburns
+    r(c, hx + 26, hy + 8, 4, 12, P.ahnHair);
+    r(c, hx + 12, hy + 12, 7, 4, P.ahnHair);          // widow's peak
+    r(c, hx + 5, hy - 3, 7, 4, P.ahnHair);            // swept-up tufts
+    r(c, hx + 17, hy - 4, 8, 5, P.ahnHair);
+
+    // Round glasses: rims, lenses, and the eyes behind them.
+    const eyeY = hy + 21;
+    [hx + 8, hx + 22].forEach((ex) => {
+      r(c, ex - 4, eyeY - 4, 9, 9, P.ahnBlack);       // rim
+      r(c, ex - 3, eyeY - 3, 7, 7, P.ahnLens);        // lens
+      if (dazed) {                                     // X eyes for the pratfall
+        r(c, ex - 2, eyeY - 2, 5, 1, P.ahnBlack);
+        r(c, ex, eyeY - 2, 1, 5, P.ahnBlack);
+      } else {
+        r(c, ex - 1, eyeY - 1, 3, 4, P.ahnBlack);     // pupil
+        r(c, ex, eyeY - 1, 1, 1, '#ffffff');          // glint
+      }
+    });
+    r(c, hx + 12, eyeY, 6, 2, P.ahnBlack);            // bridge
+
+    // Angled brows, kept a pixel clear of the rims -- touching them merges
+    // into one dark band and the face loses its expression.
+    r(c, hx + 4, hy + 14, 8, 2, P.ahnHair);
+    r(c, hx + 19, hy + 14, 8, 2, P.ahnHair);
+    r(c, hx + 11, hy + 16, 3, 2, P.ahnHair);          // inward tilt = menace
+
+    // The grin: wide, toothy, clownish.
+    const gw = Math.round(16 * grin);
+    const gx = hx + 15 - Math.round(gw / 2);
+    r(c, gx, hy + 28, gw, 5, P.ahnBlack);
+    for (let t = 1; t < gw - 1; t += 3) r(c, gx + t, hy + 28, 2, 3, '#ffffff');
+    r(c, gx + 1, hy + 32, gw - 2, 1, '#a33');         // tongue line
+  }
+
+  function drawAhnCane(c, x, y, len) {
+    const P = PAL;
+    r(c, x, y, 4, len, P.ahnPale);
+    for (let s = 0; s < len; s += 8) r(c, x, y + s, 4, 4, P.ahnRedLight);
+    r(c, x - 6, y - 4, 10, 4, P.ahnPale);             // hook
+    r(c, x - 6, y - 4, 4, 8, P.ahnRedLight);
+  }
+
   function drawAhn(c, f) {
     const P = PAL;
-    const tripping = (f >= 4 && f <= 6);
+    const GROUND = 87;
+
+    /* ---- frame 6: sprawled on his face, cane flung clear ---------------- */
+    if (f === 6) {
+      // Face-planted: head down at the right where he was heading, torso
+      // trailing back up to the left, legs still in the air. Drawn as one
+      // connected chain -- the earlier version read as loose debris because
+      // the pieces did not touch.
+      r(c, 4, 62, 24, 15, P.ahnRed);                  // torso, tipped forward
+      for (let s = 0; s < 24; s += 8) r(c, 4 + s, 62, 4, 15, P.ahnBlack);
+      r(c, 22, 60, 12, 6, P.ahnRedLight);             // collar meeting the head
+
+      r(c, 4, 44, 6, 19, P.ahnBlack);                 // legs kicked up
+      r(c, 12, 40, 6, 23, P.ahnBlack);
+      r(c, 1, 41, 11, 4, '#3d0d18');                  // shoes in the air
+      r(c, 9, 37, 11, 4, '#3d0d18');
+
+      r(c, 8, 76, 16, 6, P.ahnRedLight);              // arm splayed on the ground
+      r(c, 22, 78, 6, 5, P.ahnPale);
+
+      drawAhnHead(c, 24, 48, { grin: 0.7, dazed: true });
+
+      drawAhnCane(c, 2, 22, 16);                      // cane bouncing away
+      r(c, 40, 36, 11, 3, PAL.uiWarn);                // impact stars
+      r(c, 44, 32, 3, 11, PAL.uiWarn);
+      r(c, 20, 28, 7, 2, PAL.uiWarn);
+      return;
+    }
+
+    const tripping = (f === 4 || f === 5);
     const catching = (f >= 7);
+
     if (tripping) {
-      const ang = [-10, -30, -56][f - 4] * Math.PI / 180;
-      c.translate(24, 70); c.rotate(ang); c.translate(-24, -70);
+      // Mild stumble: rotate about the feet, nudged right so the head, which
+      // swings left as he tips, stays inside the frame.
+      const ang = (f === 4 ? -10 : -24) * Math.PI / 180;
+      const shift = f === 4 ? 4 : 11;
+      c.translate(28 + shift, GROUND);
+      c.rotate(ang);
+      c.translate(-28, -GROUND);
     }
+
     const bob = (f === 1 || f === 3) ? 1 : 0;
-    const stride = (f === 0) ? 5 : (f === 2) ? -5 : 0;
+    const stride = (f === 0) ? 3 : (f === 2) ? -3 : (tripping ? 5 : 0);
+    const swing = (f === 0) ? -3 : (f === 2) ? 3 : 0;
 
-    r(c, 18 + stride, 48 + bob, 4, 20, P.ahnBlack);
-    r(c, 26 - stride, 48 + bob, 4, 20, P.ahnBlack);
-    r(c, 16 + stride, 68, 9, 4, '#3d0d18');
-    r(c, 25 - stride, 68, 9, 4, '#3d0d18');
+    // --- legs -----------------------------------------------------------
+    const l1 = 20 + stride, l2 = 32 - stride;
+    r(c, l1, 62 + bob, 6, 22, P.ahnBlack);
+    r(c, l2, 62 + bob, 6, 22, P.ahnBlack);
+    r(c, l1 - 3, GROUND - 3, 11, 4, '#3d0d18');       // pointy shoes
+    r(c, l2 - 3, GROUND - 3, 11, 4, '#3d0d18');
 
-    const by = 26 + bob;
-    r(c, 16, by, 16, 24, P.ahnRed);
-    for (let s = 0; s < 16; s += 6) r(c, 16 + s, by, 3, 24, P.ahnBlack);
-    r(c, 14, by, 20, 3, P.ahnRedLight);
+    // --- candy cane (behind the arm) -------------------------------------
+    drawAhnCane(c, 46, 46 + bob, 34);
 
+    // --- torso: candy-cane stripes ---------------------------------------
+    const ty = 41 + bob;
+    r(c, 20, ty, 18, 23, P.ahnRed);
+    for (let sx = 0; sx < 18; sx += 6) r(c, 20 + sx, ty, 3, 23, P.ahnBlack);
+    r(c, 17, ty - 2, 24, 4, P.ahnRedLight);           // collar
+    r(c, 26, ty - 1, 6, 4, P.ahnPale);                // bow tie
+
+    // --- arms -------------------------------------------------------------
     if (catching) {
-      r(c, 32, by + 6, 14, 5, P.ahnRedLight);
-      r(c, 44, by + 4, 4, 9, P.ahnPale);
+      r(c, 38, ty + 4, 15, 5, P.ahnRedLight);         // reaching for her
+      r(c, 38, ty + 13, 12, 5, P.ahnRedLight);
+      r(c, 51, ty + 1, 5, 11, P.ahnPale);             // claw
+      r(c, 48, ty + 12, 6, 9, P.ahnPale);
     } else {
-      const sw = (f === 0) ? -3 : (f === 2) ? 3 : 0;
-      r(c, 11, by + 5 + sw, 4, 17, P.ahnRedLight);
-      r(c, 33, by + 5 - sw, 4, 17, P.ahnRedLight);
+      r(c, 13, ty + 4 + swing, 6, 26, P.ahnRedLight);
+      r(c, 39, ty + 4 - swing, 6, 26, P.ahnRedLight);
     }
 
-    r(c, 14, 2 + bob, 20, 23, P.ahnPale);            // gaunt head
-    r(c, 16, 1 + bob, 16, 6, P.ahnBlack);            // hair
-    r(c, 18, 10 + bob, 4, 3, P.ahnBlack);            // eyes
-    r(c, 27, 10 + bob, 4, 3, P.ahnBlack);
-    r(c, 17, 17 + bob, 14, 4, P.ahnBlack);           // grin
-    for (let t = 2; t < 12; t += 4) r(c, 17 + t, 17 + bob, 2, 4, P.ahnPale);
-
-    const cx = tripping ? 40 : 38, cy = tripping ? 42 : 30;
-    r(c, cx, cy, 4, 30, P.ahnPale);
-    for (let s = 0; s < 30; s += 8) r(c, cx, cy + s, 4, 3, P.ahnRedLight);
-    r(c, cx, cy - 6, 9, 3, P.ahnPale);
+    // --- head -------------------------------------------------------------
+    drawAhnHead(c, 13, 1 + bob, { grin: catching ? 1.25 : 1 });
   }
 
   /* KIMCHI JAR -- 36x36, sits on the ground. 2-frame bubbling ferment. */
