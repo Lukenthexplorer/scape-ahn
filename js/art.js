@@ -115,6 +115,22 @@ const PlaceholderArt = (function () {
     return cv;
   }
 
+  /**
+   * Rotate an image about its centre, smoothly, on its own canvas.
+   * Same two-step reasoning as `resampled`: transform smoothly at source
+   * size, then let the strip's integer artScale do the crisp upscale.
+   */
+  function rotated(img, deg) {
+    const cv = document.createElement('canvas');
+    cv.width = img.width; cv.height = img.height;
+    const c = cv.getContext('2d');
+    c.imageSmoothingEnabled = true;
+    c.translate(cv.width / 2, cv.height / 2);
+    c.rotate((deg * Math.PI) / 180);
+    c.drawImage(img, -img.width / 2, -img.height / 2);
+    return cv;
+  }
+
   /** Returns a canvas holding `img` with a flat colour burned over its pixels. */
   function tinted(img, color, alpha) {
     const cv = document.createElement('canvas');
@@ -134,6 +150,7 @@ const PlaceholderArt = (function () {
    * so the character's feet stay on the ground line across every pose, then
    * the per-frame transforms from `compose` are applied:
    *   dy       - nudge up/down (jump/fall poses)
+   *   rotate   - degrees, about the sprite's centre (lean into a jump)
    *   squashY  - vertical scale, still bottom-aligned (duck poses)
    *   tint     - flat colour burn (hurt pose)
    *
@@ -150,6 +167,7 @@ const PlaceholderArt = (function () {
 
     let img = scene.textures.get(key).getSourceImage();
     if (asset.sourceScale && asset.sourceScale !== 1) img = resampled(img, asset.sourceScale);
+    if (spec.rotate) img = rotated(img, spec.rotate);
     const sw = img.width, sh = img.height;
     if (spec.tint) img = tinted(img, spec.tint, spec.tintAlpha != null ? spec.tintAlpha : 0.5);
 

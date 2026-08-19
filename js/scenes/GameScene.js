@@ -178,7 +178,7 @@ class GameScene extends Phaser.Scene {
     this.pausePanel.add(this.add.text(0, -24, 'PAUSED', {
       fontFamily: F, fontSize: '52px', color: PAL.uiAccent, stroke: '#2b0d1c', strokeThickness: 8,
     }).setOrigin(0.5));
-    this.pausePanel.add(this.add.text(0, 30, 'P to resume    M to mute', {
+    this.pausePanel.add(this.add.text(0, 30, 'P or TAP to resume     M to mute', {
       fontFamily: F, fontSize: '20px', color: '#d9c3e8',
     }).setOrigin(0.5));
     this.pausePanel.setVisible(false);
@@ -231,8 +231,21 @@ class GameScene extends Phaser.Scene {
     const jumpUp = () => this.player.releaseJump();
     kb.on('keydown-SPACE', jumpDown); kb.on('keydown-UP', jumpDown); kb.on('keydown-W', jumpDown);
     kb.on('keyup-SPACE', jumpUp);     kb.on('keyup-UP', jumpUp);     kb.on('keyup-W', jumpUp);
-    kb.on('keydown-M', () => Sfx.toggleMute());
-    kb.on('keydown-P', () => this.togglePause());
+    /* Pause and mute are bound at the WINDOW, not on the scene.
+     * A paused Phaser scene stops running its own input plugin, so a
+     * scene-level 'keydown-P' can pause the game but can never un-pause it.
+     * Same reason the resume tap is a window listener. Both are torn down on
+     * shutdown so restarts do not stack them up. */
+    this.onWindowKey = (e) => {
+      const k = (e.key || '').toLowerCase();
+      if (k === 'p') { e.preventDefault(); this.togglePause(); }
+      else if (k === 'm') Sfx.toggleMute();
+    };
+    this.onWindowPointer = () => {
+      if (!this.isOver && this.scene.isPaused()) this.scene.resume();
+    };
+    window.addEventListener('keydown', this.onWindowKey);
+    window.addEventListener('pointerdown', this.onWindowPointer);
 
     /* ---- touch --------------------------------------------------------
      * Jump fires immediately on touch-down (zero input latency matters far
@@ -281,6 +294,8 @@ class GameScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.game.events.off(Phaser.Core.Events.BLUR, this.onBlur);
       this.game.events.off(Phaser.Core.Events.FOCUS, this.onFocus);
+      window.removeEventListener('keydown', this.onWindowKey);
+      window.removeEventListener('pointerdown', this.onWindowPointer);
     });
   }
 

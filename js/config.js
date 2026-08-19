@@ -38,6 +38,30 @@ const BACKGROUND = {
 };
 
 /* ---------------------------------------------------------------------
+ * 1b. OPENING COMIC (LoreScene)
+ * ---------------------------------------------------------------------
+ * The intro is data, not code: add a panel by adding a path here. Panels
+ * are shown in array order, scaled to fit the screen with their aspect
+ * ratio preserved (letterboxed on black -- never stretched).
+ *
+ * A listed file that fails to load is skipped rather than shown as a
+ * broken panel, so you can add 04/05 to the list before the art exists.
+ * ------------------------------------------------------------------- */
+const LORE = {
+  PANELS: [
+    'assets/sprites/lore/01.jpg',
+    'assets/sprites/lore/02.jpg',
+    'assets/sprites/lore/03.jpg',
+    // 'assets/sprites/lore/04.jpg',   <- drop the file in, uncomment, done
+    // 'assets/sprites/lore/05.jpg',
+  ],
+  FADE_MS: 350,            // fade-to-black between panels and on exit
+  HINT_DELAY_MS: 1500,     // how long a panel is up before "tap to continue"
+  ONCE_PER_SESSION: false, // true = show it only on the first load per tab
+  SESSION_KEY: 'scapeahn.loreSeen',
+};
+
+/* ---------------------------------------------------------------------
  * 2. PLAYER (the girl)
  * ------------------------------------------------------------------- */
 const PLAYER = {
@@ -392,8 +416,11 @@ const ASSETS = {
       { src: 'run', i: 1 },
       { src: 'run', i: 2 },
       { src: 'run', i: 3 },
-      { src: 'run', i: 2, dy: -3 },                  // 4 jump  -- tucked stride, lifted
-      { src: 'run', i: 0, dy: 1 },                   // 5 fall  -- extended stride, dropped
+      // Leaning into the arc is what separates "jumping" from "running while
+      // off the ground". 10 degrees reads as a leap; much more and she looks
+      // like she is falling over.
+      { src: 'run', i: 2, dy: -3, rotate: -10 },     // 4 jump  -- tucked stride, lifted, leaning
+      { src: 'run', i: 0, dy: 1, rotate: 5 },        // 5 fall  -- reaching for the ground
       { src: 'run', i: 0, squashY: 0.55 },           // 6 duck  -- squashed run frames
       { src: 'run', i: 2, squashY: 0.55 },           // 7 duck
       { src: 'run', i: 1, tint: '#ff2d55', tintAlpha: 0.55 },  // 8 hurt

@@ -71,7 +71,9 @@ class BootScene extends Phaser.Scene {
     // Author-time safety net: warns in the console about any obstacle pattern
     // that cannot actually be cleared (see PATTERNS in config.js).
     ObstacleSpawner.validatePatterns();
-    this.scene.start(DEV.has('skip') ? 'Game' : 'Title');
+    // Boot -> Lore -> Title -> Game. ?skip jumps straight into a run.
+    if (DEV.has('skip')) this.scene.start('Game');
+    else this.scene.start(LoreScene.shouldPlay() ? 'Lore' : 'Title');
   }
 }
 
@@ -104,7 +106,7 @@ class TitleScene extends Phaser.Scene {
       stroke: '#2b0d1c', strokeThickness: 10,
     }).setOrigin(0.5).setDepth(50);
 
-    this.add.text(GAME.WIDTH / 2, 150, 'the evil candy man is right behind you', {
+    this.add.text(GAME.WIDTH / 2, 150, 'run, Nina, run', {
       fontFamily: 'Trebuchet MS, sans-serif', fontSize: '20px', color: '#d9c3e8',
     }).setOrigin(0.5).setDepth(50);
 

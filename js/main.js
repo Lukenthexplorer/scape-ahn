@@ -6,7 +6,8 @@
 
 /* Dev hooks, off by default:
  *   index.html?debug  -> draw every Arcade hitbox
- *   index.html?skip   -> boot straight into a run, skipping the title screen  */
+ *   index.html?skip   -> boot straight into a run, skipping intro and title
+ *   index.html?nolore -> straight to the title screen, skipping the comic  */
 const DEV = new URLSearchParams(location.search);
 
 const gameConfig = {
@@ -35,7 +36,7 @@ const gameConfig = {
 
   input: { activePointers: 2 },         // allow a second finger on mobile
 
-  scene: [BootScene, TitleScene, GameScene, GameOverScene],
+  scene: [BootScene, LoreScene, TitleScene, GameScene, GameOverScene],
 };
 
 const game = new Phaser.Game(gameConfig);
