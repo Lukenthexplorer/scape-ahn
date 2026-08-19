@@ -12,8 +12,15 @@
  * ===================================================================== */
 
 class Player extends Phaser.Physics.Arcade.Sprite {
-  constructor(scene, x, y) {
-    super(scene, x, y, ASSETS.girl.key, 0);
+  /**
+   * @param {string} charKey key into CHARACTERS (js/config.js). Everything
+   *   character-specific -- texture, animation names, both hitboxes -- comes
+   *   from that entry, so adding a runner is a config change, not a code one.
+   */
+  constructor(scene, x, y, charKey) {
+    const chr = CHARACTERS[charKey] || CHARACTERS.nina;
+    super(scene, x, y, ASSETS[chr.asset].key, 0);
+    this.chr = chr;
     scene.add.existing(this);
     scene.physics.add.existing(this);
 
@@ -31,8 +38,8 @@ class Player extends Phaser.Physics.Arcade.Sprite {
     this.onLand = null;            // optional callback(scene) set by GameScene
     this.dead = false;
 
-    this.applyBody(PLAYER.BODY_STAND);
-    this.play('girl-run');
+    this.applyBody(this.chr.bodyStand);
+    this.play(this.chr.anims.run);
   }
 
   /** Swap the hitbox between standing and ducking shapes (from config). */
@@ -73,7 +80,7 @@ class Player extends Phaser.Physics.Arcade.Sprite {
   setDuck(on) {
     if (this.dead || this.isDucking === on) return;
     this.isDucking = on;
-    this.applyBody(on ? PLAYER.BODY_DUCK : PLAYER.BODY_STAND);
+    this.applyBody(on ? this.chr.bodyDuck : this.chr.bodyStand);
   }
 
   /* ---------------- damage & death ------------------------------------ */
@@ -116,9 +123,10 @@ class Player extends Phaser.Physics.Arcade.Sprite {
   setState_(s) {
     if (this.state === s) return;
     this.state = s;
+    const a = this.chr.anims;
     const anim = {
-      run: 'girl-run', jump: 'girl-jump', fall: 'girl-fall',
-      duck: 'girl-duck', hurt: 'girl-hurt', caught: 'girl-hurt',
+      run: a.run, jump: a.jump, fall: a.fall,
+      duck: a.duck, hurt: a.hurt, caught: a.hurt,
     }[s];
     if (anim) this.play(anim, true);
   }

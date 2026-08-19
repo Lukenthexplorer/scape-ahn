@@ -25,7 +25,9 @@ const Sfx = (function () {
   const buffers = {};       // cue key -> decoded AudioBuffer
   let actx = null;          // shared AudioContext
   let masterGain = null;
-  let music = null;         // HTMLAudioElement
+  let music = null;         // HTMLAudioElement, the main soundtrack
+  let charLoop = null;      // HTMLAudioElement, a character's own running theme
+  let pendingTrack = null;  // soundtrack to restore once a char theme clears
   let muted = false;
   let started = false;
 
@@ -147,9 +149,67 @@ const Sfx = (function () {
     if (AUDIO.SYNTH_FALLBACK) blip(def);
   }
 
+  /**
+   * Swap the soundtrack (e.g. per phase). Pass nothing to go back to
+   * AUDIO.MUSIC. A character's own theme outranks this: if one is playing,
+   * the change is remembered and applied when that theme is cleared.
+   */
+  function setMusicTrack(def) {
+    const target = (def && def.src) ? def : AUDIO.MUSIC;
+    if (!target || !target.src) return;
+    pendingTrack = target;
+    if (charLoop) return;                    // a runner's theme owns the channel
+    if (music && music.src.indexOf(target.src) !== -1) return;   // already on it
+
+    if (music) music.pause();
+    music = new Audio(target.src);
+    music.loop = target.loop !== false;
+    music.preload = 'auto';
+    music.volume = (target.volume != null ? target.volume : 1) * AUDIO.MASTER_VOLUME;
+    music.muted = muted;
+    playMusic();
+  }
+
+  /**
+   * Give the current runner their own looping theme (CHARACTERS[x].runLoop),
+   * or pass nothing to clear it. While one is playing the main soundtrack is
+   * paused rather than mixed under it: both are full-length loops and stacking
+   * them just muddies the pair.
+   */
+  function setCharacterLoop(def) {
+    stopCharacterLoop();
+    if (!def || !def.src || !AUDIO.ENABLED) return;
+    charLoop = new Audio(def.src);
+    charLoop.loop = true;
+    charLoop.preload = 'auto';
+    charLoop.volume = (def.volume != null ? def.volume : 1) * AUDIO.MASTER_VOLUME;
+    charLoop.muted = muted;
+    if (music) music.pause();
+    const p = charLoop.play();
+    if (p && p.catch) p.catch(() => {});
+  }
+
+  function stopCharacterLoop() {
+    if (!charLoop) return;
+    charLoop.pause();
+    charLoop = null;
+    if (pendingTrack) setMusicTrack(pendingTrack);   // whatever the phase wanted
+    else playMusic();
+  }
+
+  /** Pause/resume whichever loop is currently the "music" (scene pause). */
+  function setLoopPaused(on) {
+    const track = charLoop || music;
+    if (!track) return;
+    if (on) track.pause();
+    else if (!muted && AUDIO.ENABLED) { const p = track.play(); if (p && p.catch) p.catch(() => {}); }
+  }
+
   /** Start the looping background music. Safe to call repeatedly. */
   function playMusic() {
     if (!AUDIO.ENABLED || muted || !music || !music.paused) return;
+    if (charLoop) return;          // a character theme owns the channel
+
     const p = music.play();
     if (p && p.catch) p.catch(() => {});   // pre-gesture rejection is expected
   }
@@ -167,10 +227,12 @@ const Sfx = (function () {
     muted = v;
     if (masterGain) masterGain.gain.value = v ? 0 : AUDIO.MASTER_VOLUME;
     if (music) { music.muted = v; if (!v) playMusic(); }
+    if (charLoop) charLoop.muted = v;
     return muted;
   }
   function toggleMute() { return setMuted(!muted); }
   function isMuted() { return muted; }
 
-  return { init, unlock, play, playMusic, stopMusic, duckMusic, setMuted, toggleMute, isMuted };
+  return { init, unlock, play, playMusic, stopMusic, duckMusic, setMuted, toggleMute, isMuted,
+           setCharacterLoop, stopCharacterLoop, setLoopPaused, setMusicTrack };
 })();

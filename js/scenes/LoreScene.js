@@ -36,6 +36,17 @@ class LoreScene extends Phaser.Scene {
     return true;
   }
 
+  /**
+   * Runs as the opening comic by default, or as a mid-game interlude when
+   * launched with data:
+   *   { panels: [{img,text}], resume: 'Game', onDone: fn }
+   * In interlude mode it resumes the caller instead of starting the title.
+   */
+  init(data) {
+    this.cfg = data || {};
+    this.list = (this.cfg.panels && this.cfg.panels.length) ? this.cfg.panels : LORE.PANELS;
+  }
+
   preload() {
     // Panels are loaded here rather than in BootScene so the intro's weight
     // never delays the gameplay assets. Missing files are collected and
@@ -45,20 +56,22 @@ class LoreScene extends Phaser.Scene {
       console.warn('[lore] panel missing, skipping:', file.src);
       this.failed[file.key] = true;
     });
-    LORE.PANELS.forEach((panel, i) => this.load.image(this.panelKey(i), panel.img));
+    this.list.forEach((panel) => this.load.image(this.panelKey(panel.img), panel.img));
   }
 
-  panelKey(i) { return 'lore' + i; }
+  /* Keyed by path, not index: the interlude and the opening comic are
+   * different image sets, and index keys would collide between them. */
+  panelKey(path) { return 'lore_' + String(path).replace(/[^a-z0-9]/gi, '_'); }
 
   create() {
     // Only the panels that actually arrived, image and caption kept together.
-    this.panels = LORE.PANELS
-      .map((panel, i) => ({ key: this.panelKey(i), text: panel.text || '' }))
+    this.panels = this.list
+      .map((panel) => ({ key: this.panelKey(panel.img), text: panel.text || '' }))
       .filter((p) => !this.failed[p.key] && this.textures.exists(p.key));
 
     if (!this.panels.length) { this.finish(true); return; }
 
-    if (LORE.ONCE_PER_SESSION) sessionStorage.setItem(LORE.SESSION_KEY, '1');
+    if (LORE.ONCE_PER_SESSION && !this.cfg.resume) sessionStorage.setItem(LORE.SESSION_KEY, '1');
 
     this.cameras.main.setBackgroundColor('#000000');
     this.index = 0;
@@ -247,11 +260,22 @@ class LoreScene extends Phaser.Scene {
   finish(immediate) {
     if (this.finishing) return;
     this.finishing = true;
-    if (immediate) { this.scene.start('Title'); return; }
 
+    const leave = () => {
+      if (this.cfg.resume) {
+        // Interlude: hand control back to the paused scene that launched us.
+        const done = this.cfg.onDone;
+        this.scene.stop();
+        this.scene.resume(this.cfg.resume);
+        if (done) done();
+      } else {
+        this.scene.start('Title');
+      }
+    };
+
+    if (immediate) { leave(); return; }
     this.busy = true;
     this.cameras.main.fadeOut(LORE.FADE_MS, 0, 0, 0);
-    this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE,
-      () => this.scene.start('Title'));
+    this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, leave);
   }
 }

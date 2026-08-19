@@ -46,6 +46,13 @@ const BACKGROUND = {
   // real key swap, not a repaint of SUBWAY_FAR in place: see the comment on
   // that method for why.
   SUBWAY_FAR_TRAIN: { key: 'bgSubwayFarTrain' },
+
+  // Phase 3: the Insper campus, in daylight. Normalised offline by
+  // tools/make_background_layers.py to BG_SRC's geometry (its plaza starts
+  // lower than the Seoul street's pavement, so the source is lifted 75px),
+  // which is what lets Backdrop.setLayers() swap it in with no re-measuring.
+  INSPER_FAR:  { key: 'bgInsperFar',  path: 'assets/sprites/background/background2_far.png',  factor: 0.28 },
+  INSPER_NEAR: { key: 'bgInsperNear', path: 'assets/sprites/background/background2_near.png', factor: 1.0 },
 };
 
 /* ---------------------------------------------------------------------
@@ -386,7 +393,11 @@ const CANDY = {
   MIN_INTENSITY: 0.08,
   HEIGHT: 120,            // px above the ground (inside a ~161px jump apex)
   SCORE: 90,
-  AHN_PUSHBACK: 20,       // px of skill credit, same currency as a near miss
+  // Two separate effects on purpose. The credit is the lasting one (it decays
+  // like near-miss credit); the kick is an instant shove so grabbing a
+  // lollipop VISIBLY buys ground back rather than only nudging a number.
+  AHN_PUSHBACK: 34,       // px of skill credit, same currency as a near miss
+  AHN_KICK: 26,           // px AHN is shoved back immediately on pickup
   BODY: { w: 40, h: 40, ox: 8, oy: 8 },
 
   /* SUGAR RUSH -- each lollipop makes Nina faster, up to a hard ceiling.
@@ -462,6 +473,9 @@ const SCORE = {
  * ------------------------------------------------------------------- */
 const PHASE2 = {
   SCORE_THRESHOLD: 6700,
+  // Underground gets its own track. Streams like the main soundtrack, so the
+  // swap mid-run costs nothing. Phases with no MUSIC fall back to AUDIO.MUSIC.
+  MUSIC: { src: 'assets/audio/soundtrack_phase2.mp3', volume: 0.34 },
   BANNER_TITLE: 'SEOUL SUBWAY',
   BANNER_SUB: 'AHN follows her underground...',
 
@@ -478,6 +492,78 @@ const PHASE2 = {
   TRAIN_GAP_MIN_MS: 5000,
   TRAIN_GAP_MAX_MS: 11000,
   TRAIN_FLASH_MS: 650,
+};
+
+/* ---------------------------------------------------------------------
+ * 6b. PHASE 3  --  she surfaces at Insper
+ * ---------------------------------------------------------------------
+ * The subway runs from PHASE2.SCORE_THRESHOLD all the way to here, so this
+ * is the second and final environment change of a run.
+ *
+ * Unlike phase 2 (which has an in-engine cutscene), this transition is told
+ * with comic panels: the run pauses, LoreScene plays PANELS as an
+ * interlude, then the world comes back as the campus. Drop the files in and
+ * list them below -- if none of them load, the phase still changes, just
+ * without the interlude, so this is safe to ship before the art exists.
+ * ------------------------------------------------------------------- */
+const PHASE3 = {
+  SCORE_THRESHOLD: 13067,
+  MUSIC: null,            // back to the main soundtrack up in the daylight
+  BANNER_TITLE: 'INSPER',
+  BANNER_SUB: 'daylight at last',
+
+  // Same shape as LORE.PANELS: { img, text }.
+  // No `text` on these: the panels carry their own lettering in the artwork,
+  // and a caption card on top would just say it twice.
+  PANELS: [
+    { img: 'assets/sprites/lore/04.jpg' },
+    { img: 'assets/sprites/lore/05.jpg' },
+    // { img: 'assets/sprites/lore/06.jpg' },   <- third scene, when it lands
+  ],
+
+  // Reaching Insper is what unlocks Rafa (see CHARACTERS).
+  UNLOCKS: 'rafa',
+};
+
+/* ---------------------------------------------------------------------
+ * 6c. PLAYABLE CHARACTERS
+ * ---------------------------------------------------------------------
+ * Nina is always available. Rafa is unlocked by reaching PHASE3 and is
+ * remembered in localStorage; the title screen offers whoever is unlocked.
+ *
+ * Each entry names the ASSETS key its animations were registered under and
+ * carries its OWN hitboxes, because the two characters are not the same
+ * shape -- Rafa is on a rhino and is far wider than Nina.
+ * ------------------------------------------------------------------- */
+const CHARACTERS = {
+  nina: {
+    name: 'NINA',
+    asset: 'girl',
+    anims: { run: 'girl-run', jump: 'girl-jump', fall: 'girl-fall', duck: 'girl-duck', hurt: 'girl-hurt' },
+    bodyStand: { w: 28, h: 60, ox: 32, oy: 67 },
+    bodyDuck: { w: 32, h: 34, ox: 30, oy: 93 },
+    locked: false,
+  },
+  rafa: {
+    name: 'RAFA',
+    asset: 'rafa',
+    anims: { run: 'rafa-run', jump: 'rafa-jump', fall: 'rafa-fall', duck: 'rafa-duck', hurt: 'rafa-hurt' },
+    // Measured off the composited sheet: his silhouette sits at frame
+    // x 28..99, y 50..119. The rhino is long and low, so he is a wider,
+    // shorter target than Nina -- and the horn and tail are deliberately
+    // outside the box. His standing top lands at GROUND_Y-58 (Nina: -60) and
+    // his ducking top at GROUND_Y-34 (Nina: -42), so the tuned duck window
+    // for the high idol still works for both.
+    bodyStand: { w: 56, h: 58, ox: 36, oy: 61 },
+    bodyDuck: { w: 60, h: 34, ox: 34, oy: 85 },
+    locked: true,
+    unlockKey: 'scapeahn.rafaUnlocked',
+    // His own running theme. Long enough to be music rather than an effect,
+    // so it streams and REPLACES the soundtrack while he is the runner --
+    // layering two full-length loops just muddies both.
+    runLoop: { src: 'assets/audio/rafa_running.mp3', volume: 0.5 },
+  },
+  SELECTED_KEY: 'scapeahn.character',
 };
 
 /* Dev cheats -- see GameScene.bindInput()/cheatToggleGodMode(). Not gated
@@ -604,6 +690,60 @@ const ASSETS = {
       'ahn-run':   { frames: [0, 1, 2, 3], frameRate: 7, repeat: -1 },
       'ahn-trip':  { frames: [4, 5, 6],    frameRate: 6, repeat: 0 },
       'ahn-catch': { frames: [7, 8],       frameRate: 8, repeat: -1 },
+    },
+  },
+
+
+  /* RAFA -- the unlockable second runner, mounted on a rhino. Unlike Nina he
+   * ships with a REAL jump animation, so his jump/fall frames are actual art
+   * rather than re-posed run frames. Unlocked by reaching phase 3. */
+  rafa: {
+    key: 'rafa',
+    path: null,
+    frameWidth: 128, frameHeight: 128, frameCount: 11, artScale: 2,
+    // Drawn at two thirds of his 64px source: a little taller than Nina,
+    // which is right for a mounted character, without the rhino dwarfing the
+    // obstacles it has to clear.
+    sourceScale: 0.66,
+    sources: {
+      run: [
+        'assets/sprites/rafa/Idle/animations/Running/south/frame_000.png',
+        'assets/sprites/rafa/Idle/animations/Running/south/frame_001.png',
+        'assets/sprites/rafa/Idle/animations/Running/south/frame_002.png',
+        'assets/sprites/rafa/Idle/animations/Running/south/frame_003.png',
+        'assets/sprites/rafa/Idle/animations/Running/south/frame_004.png',
+        'assets/sprites/rafa/Idle/animations/Running/south/frame_005.png',
+      ],
+      jump: [
+        'assets/sprites/rafa/Idle/animations/Running_Jump/south/frame_000.png',
+        'assets/sprites/rafa/Idle/animations/Running_Jump/south/frame_001.png',
+        'assets/sprites/rafa/Idle/animations/Running_Jump/south/frame_002.png',
+        'assets/sprites/rafa/Idle/animations/Running_Jump/south/frame_003.png',
+        'assets/sprites/rafa/Idle/animations/Running_Jump/south/frame_004.png',
+        'assets/sprites/rafa/Idle/animations/Running_Jump/south/frame_005.png',
+        'assets/sprites/rafa/Idle/animations/Running_Jump/south/frame_006.png',
+        'assets/sprites/rafa/Idle/animations/Running_Jump/south/frame_007.png',
+      ],
+    },
+    compose: [
+      { src: 'run', i: 0 },                          // 0-5 run cycle (real art)
+      { src: 'run', i: 1 },
+      { src: 'run', i: 2 },
+      { src: 'run', i: 3 },
+      { src: 'run', i: 4 },
+      { src: 'run', i: 5 },
+      { src: 'jump', i: 2 },                         // 6 jump  -- real jump art
+      { src: 'jump', i: 5 },                         // 7 fall
+      { src: 'run', i: 0, squashY: 0.62 },           // 8-9 duck -- squashed run
+      { src: 'run', i: 3, squashY: 0.62 },
+      { src: 'run', i: 1, tint: '#ff2d55', tintAlpha: 0.55 },  // 10 hurt
+    ],
+    anims: {
+      'rafa-run':  { frames: [0, 1, 2, 3, 4, 5], frameRate: 14, repeat: -1 },
+      'rafa-jump': { frames: [6],                frameRate: 1,  repeat: 0 },
+      'rafa-fall': { frames: [7],                frameRate: 1,  repeat: 0 },
+      'rafa-duck': { frames: [8, 9],             frameRate: 10, repeat: -1 },
+      'rafa-hurt': { frames: [10],               frameRate: 1,  repeat: 0 },
     },
   },
 

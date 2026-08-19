@@ -31,6 +31,8 @@ class BootScene extends Phaser.Scene {
     // --- the street background, pre-split into parallax layers -----------
     this.load.image(BACKGROUND.FAR.key, BACKGROUND.FAR.path);
     this.load.image(BACKGROUND.NEAR.key, BACKGROUND.NEAR.path);
+    this.load.image(BACKGROUND.INSPER_FAR.key, BACKGROUND.INSPER_FAR.path);
+    this.load.image(BACKGROUND.INSPER_NEAR.key, BACKGROUND.INSPER_NEAR.path);
 
     // NOTE: audio is NOT loaded here on purpose -- see js/audio.js. It is
     // fetched in the background so a slow track can never stall the boot.
@@ -133,11 +135,43 @@ class TitleScene extends Phaser.Scene {
     this.tweens.add({ targets: start, alpha: 0.35, duration: 620, yoyo: true, repeat: -1 });
     prompt.setAlpha(0.85);
 
+    this.buildCharacterPicker();
+
     const go = () => { Sfx.unlock(); Sfx.playMusic(); this.scene.start('Game'); };
     this.input.keyboard.once('keydown-SPACE', go);
     this.input.keyboard.once('keydown-UP', go);
     this.input.keyboard.once('keydown-ENTER', go);
     this.input.once('pointerdown', go);
+  }
+
+  /**
+   * Runner picker. Only appears once a second character is unlocked, so a
+   * first-time player never sees a menu with one entry in it.
+   */
+  buildCharacterPicker() {
+    const F = 'Trebuchet MS, sans-serif';
+    const unlocked = Object.keys(CHARACTERS).filter((k) => {
+      const c = CHARACTERS[k];
+      return c && c.name && (!c.locked || localStorage.getItem(c.unlockKey));
+    });
+    if (unlocked.length < 2) return;
+
+    let idx = Math.max(0, unlocked.indexOf(GameScene.selectedCharacter()));
+    const label = this.add.text(GAME.WIDTH / 2, 232, '', {
+      fontFamily: F, fontSize: '22px', color: '#ffffff',
+      backgroundColor: '#2b1c36', padding: { x: 16, y: 8 },
+    }).setOrigin(0.5).setDepth(30).setInteractive({ useHandCursor: true });
+
+    const apply = () => {
+      const key = unlocked[idx];
+      localStorage.setItem(CHARACTERS.SELECTED_KEY, key);
+      label.setText('RUNNER:  ' + CHARACTERS[key].name + '   (C to change)');
+    };
+    const cycle = () => { idx = (idx + 1) % unlocked.length; apply(); };
+    apply();
+
+    label.on('pointerup', (p, x, y, e) => { if (e) e.stopPropagation(); cycle(); });
+    this.input.keyboard.on('keydown-C', cycle);
   }
 
   update(_, delta) {

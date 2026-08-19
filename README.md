@@ -61,6 +61,43 @@ mid-air fast-falls.
 - **The ghost**: a marker parked at the exact distance your best run died.
 - Rain rolls through in bands; purely cosmetic.
 
+## Phases
+
+A run moves through three environments, gated on **score**:
+
+| Score | Phase | Backdrop | Transition |
+|---|---|---|---|
+| 0 | Seoul street (night) | `background.jpg` | — |
+| 6700 | Seoul subway | procedural, `art.js` | in-engine cutscene + own soundtrack |
+| 13067 | Insper campus (day) | `background2.jpg` | comic interlude (`PHASE3.PANELS`) |
+
+Because the trigger is score and not distance, a player who chains near misses
+reaches each phase sooner in distance terms than one who plays safe.
+
+Two things make a backdrop swap cheap: `Backdrop.setLayers()` only changes
+textures, and every layer is normalised to `BG_SRC`'s geometry beforehand.
+The Insper art needed lifting 75px for that (its plaza starts lower than the
+street's pavement) -- `tools/make_background_layers.py` bakes the lift in, so
+runtime needs no per-backdrop special cases. Without it the layer split lands
+mid-staircase and the steps tear, the halves scrolling at different speeds.
+
+Phase 3 reuses phase 2's obstacle set: there is no phase-3 vocabulary authored
+yet, and spawning nothing would be worse than a reskin.
+
+## Characters
+
+Nina is always available. **Rafa** -- mounted on a rhino, and the only one with
+real jump art -- is unlocked by reaching phase 3, remembered in localStorage,
+and picked on the title screen (the picker only appears once something is
+actually unlocked). He brings his own running theme, which takes over the
+music channel while he is the runner.
+
+Everything character-specific lives in `CHARACTERS`: texture, animation names
+and **both hitboxes**, because the two are not the same shape. Their tuned
+geometry lines up deliberately -- Rafa stands at `GROUND_Y-58` to Nina's `-60`
+and ducks to `-34` against her `-42`, so the high-idol duck window works for
+both without a second derivation.
+
 ## The opening comic
 
 `LoreScene` plays before the title screen. Panels are listed in `LORE.PANELS`
@@ -93,6 +130,12 @@ is unavailable -- offline, say -- the caption falls back to monospace and the
 game carries on.
 
 `LORE.ONCE_PER_SESSION: true` limits it to the first load per tab.
+
+The same scene doubles as a **mid-run interlude**: launched with
+`{ panels, resume: 'Game', onDone }` it plays a different panel set and hands
+control back to the paused scene instead of going to the title. That is how
+phase 3 is introduced. Panel textures are keyed by path rather than index so
+the two panel sets cannot collide.
 
 ## Tuning
 

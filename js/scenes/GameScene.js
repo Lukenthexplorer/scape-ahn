@@ -51,7 +51,10 @@ class GameScene extends Phaser.Scene {
     // Short grace period so the player is never hit before they can react.
     this.spawner.distanceSinceSpawn = -260;
 
-    Sfx.playMusic();          // no-op if it is already looping from the title
+    // A runner with their own theme takes over the music channel.
+    const chr = CHARACTERS[this.charKey];
+    if (chr && chr.runLoop) Sfx.setCharacterLoop(chr.runLoop);
+    else { Sfx.stopCharacterLoop(); Sfx.playMusic(); }
     Sfx.duckMusic(false);
     this.cameras.main.fadeIn(220, 0, 0, 0);
   }
@@ -90,8 +93,17 @@ class GameScene extends Phaser.Scene {
     this.buildWeather();
   }
 
+  /** Which runner the player picked, falling back to Nina if it is locked. */
+  static selectedCharacter() {
+    const key = localStorage.getItem(CHARACTERS.SELECTED_KEY) || 'nina';
+    const chr = CHARACTERS[key];
+    if (!chr || (chr.locked && !localStorage.getItem(chr.unlockKey))) return 'nina';
+    return key;
+  }
+
   buildEntities() {
-    this.player = new Player(this, PLAYER.X, GAME.GROUND_Y);
+    this.charKey = GameScene.selectedCharacter();
+    this.player = new Player(this, PLAYER.X, GAME.GROUND_Y, this.charKey);
     this.physics.add.collider(this.player, this.floor);
 
     this.ahn = new Ahn(this, AHN.X_FAR, GAME.GROUND_Y + AHN.Y_OFFSET);
@@ -232,8 +244,14 @@ class GameScene extends Phaser.Scene {
       fontFamily: F, fontSize: '20px', color: '#d9c3e8',
     }).setOrigin(0.5));
     this.pausePanel.setVisible(false);
-    this.events.on(Phaser.Scenes.Events.PAUSE, () => this.pausePanel.setVisible(true));
-    this.events.on(Phaser.Scenes.Events.RESUME, () => this.pausePanel.setVisible(false));
+    this.events.on(Phaser.Scenes.Events.PAUSE, () => {
+      this.pausePanel.setVisible(true);
+      Sfx.setLoopPaused(true);
+    });
+    this.events.on(Phaser.Scenes.Events.RESUME, () => {
+      this.pausePanel.setVisible(false);
+      Sfx.setLoopPaused(false);
+    });
 
     this.buildTouchHint();
   }
@@ -470,6 +488,7 @@ class GameScene extends Phaser.Scene {
         this.multiplier = Math.max(1, this.multiplier - SCORE.MULT_DECAY_RATE * dt);
       }
       if (this.phase === 1 && this.score >= PHASE2.SCORE_THRESHOLD) this.enterPhase2();
+      else if (this.phase === 2 && this.score >= PHASE3.SCORE_THRESHOLD) this.enterPhase3();
 
       /* --- 5. CHARACTERS -------------------------------------------- */
       // Sell the acceleration: the run cycle plays faster as the world does.
@@ -586,7 +605,10 @@ class GameScene extends Phaser.Scene {
     candy.collected = true;
     const bonus = Math.round(CANDY.SCORE * this.multiplier);
     this.score += bonus;
+    // Two effects: lasting credit, plus an instant shove so the lollipop
+    // visibly buys ground back instead of only moving a number.
     this.ahn.addCredit(CANDY.AHN_PUSHBACK);
+    this.ahn.x = Math.max(AHN.X_FAR, this.ahn.x - CANDY.AHN_KICK);
 
     // Clamped at the ceiling: say so, so the limit is something you are told
     // about rather than something you silently stop benefiting from.
@@ -689,6 +711,8 @@ class GameScene extends Phaser.Scene {
     this.phase = 2;
     this.spawner.setPhase(2);
 
+    Sfx.setMusicTrack(PHASE2.MUSIC);
+
     this.playSubwayEntrance(() => {
       this.cameras.main.flash(280, 255, 255, 255);
       this.cameras.main.shake(220, 0.01);
@@ -698,6 +722,49 @@ class GameScene extends Phaser.Scene {
       });
       this.showPhaseBanner(PHASE2.BANNER_TITLE, PHASE2.BANNER_SUB);
       this.scheduleTrainPass();
+    });
+  }
+
+  /* ==================================================================
+   * PHASE 3  --  she surfaces at Insper (PHASE3.SCORE_THRESHOLD)
+   * ------------------------------------------------------------------
+   * Told with comic panels rather than an in-engine cutscene: the run is
+   * frozen, LoreScene plays PHASE3.PANELS as an interlude, and the world
+   * comes back as the campus. If no panels load the phase still changes --
+   * the interlude is decoration, not a dependency.
+   *
+   * Phase 3 keeps the subway's obstacle vocabulary: the spawner stays on
+   * phase 2 patterns because there is no phase-3 set authored yet, and
+   * silently spawning nothing would be worse than a reskin.
+   * ================================================================== */
+  enterPhase3() {
+    if (this.phase === 3) return;
+    this.phase = 3;
+
+    // Reaching daylight is what unlocks Rafa.
+    if (PHASE3.UNLOCKS && CHARACTERS[PHASE3.UNLOCKS]) {
+      localStorage.setItem(CHARACTERS[PHASE3.UNLOCKS].unlockKey, '1');
+    }
+
+    const swap = () => {
+      Sfx.setMusicTrack(PHASE3.MUSIC);
+      this.cameras.main.flash(320, 255, 255, 255);
+      this.time.delayedCall(120, () => {
+        this.backdrop.setLayers(BACKGROUND.INSPER_FAR, BACKGROUND.INSPER_NEAR);
+      });
+      this.showPhaseBanner(PHASE3.BANNER_TITLE, PHASE3.BANNER_SUB);
+    };
+
+    const panels = (PHASE3.PANELS || []).filter((p) => p && p.img);
+    if (!panels.length) { swap(); return; }
+
+    // Freeze the run, hand the screen to LoreScene, pick up where we left off.
+    this.running = false;
+    this.scene.pause();
+    this.scene.launch('Lore', {
+      panels: panels,
+      resume: 'Game',
+      onDone: () => { this.running = true; swap(); },
     });
   }
 

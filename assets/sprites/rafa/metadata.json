@@ -1,0 +1,59 @@
+{
+  "group_id": "63831f38-834c-4234-99cc-23acabfcb0c7",
+  "states": [
+    {
+      "character": {
+        "id": "513b2d8a-b922-4471-a2cb-13bc4a7fd60f",
+        "name": "Idle",
+        "prompt": "16-bit pixel art, retro platformer game sprite, clean pixel clusters, limited\nvibrant color palette, transparent background, side-view, game-ready sprite sheet\n\n16-bit pixel art character sprite sheet, Rafael, cool stylish Black man, funky\ndisco-inspired streetwear outfit, afro or trendy hairstyle, sunglasses,\nconfident pose, riding on top of a charging rhino, side-view, rhino has thick\ngrey pixel-art hide with subtle shading and a prominent horn, dynamic action\npose with Rafael's arm raised, includes rhino-gallop animation frames\n(legs cycling) and Rafael's arm-wave/groove frame, transparent background,\nvibrant saturated colors, clean pixel outlines, retro platformer obstacle\nsprite, original non-copyrighted character design",
+        "size": {
+          "width": 64,
+          "height": 64
+        },
+        "template_id": "mannequin",
+        "directions": 8,
+        "view": "side",
+        "created_at": "2026-08-19T21:14:23.426386+00:00"
+      },
+      "folder": "Idle",
+      "frames": {
+        "rotations": {
+          "south": "Idle/rotations/south.png",
+          "south-east": "Idle/rotations/south-east.png",
+          "east": "Idle/rotations/east.png",
+          "north-east": "Idle/rotations/north-east.png",
+          "north": "Idle/rotations/north.png",
+          "north-west": "Idle/rotations/north-west.png",
+          "west": "Idle/rotations/west.png",
+          "south-west": "Idle/rotations/south-west.png"
+        },
+        "animations": {
+          "Running_Jump": {
+            "south": [
+              "Idle/animations/Running_Jump/south/frame_000.png",
+              "Idle/animations/Running_Jump/south/frame_001.png",
+              "Idle/animations/Running_Jump/south/frame_002.png",
+              "Idle/animations/Running_Jump/south/frame_003.png",
+              "Idle/animations/Running_Jump/south/frame_004.png",
+              "Idle/animations/Running_Jump/south/frame_005.png",
+              "Idle/animations/Running_Jump/south/frame_006.png",
+              "Idle/animations/Running_Jump/south/frame_007.png"
+            ]
+          },
+          "Running": {
+            "south": [
+              "Idle/animations/Running/south/frame_000.png",
+              "Idle/animations/Running/south/frame_001.png",
+              "Idle/animations/Running/south/frame_002.png",
+              "Idle/animations/Running/south/frame_003.png",
+              "Idle/animations/Running/south/frame_004.png",
+              "Idle/animations/Running/south/frame_005.png"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "export_version": "3.1",
+  "export_date": "2026-08-19T21:25:14.763680"
+}
