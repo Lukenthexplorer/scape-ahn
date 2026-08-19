@@ -189,7 +189,27 @@ no padding -- a longer arc only widens their take-off window. This is also why
 the boost is a fraction rather than a flat `+80 px/s`: a flat bonus is +20% at
 the start and +9% at top speed, so no single margin would cover it.
 
-Dev hooks (append to the URL):
+### Dev cheats
+
+Not gated behind a URL flag -- none of them can be hit by accident.
+
+| Input | Effect |
+|---|---|
+| `SPACE` + `UP` + `M` together | toggle god mode: **infinite lives**, hearts turn gold |
+| `UP UP DOWN DOWN LEFT RIGHT` | the same toggle, as a sequence |
+| hold `→` while in god mode | fast-forward the run, to reach a later phase quickly |
+| `/` | end the run instantly, for testing game over |
+
+The chord keeps its own held-key set rather than reading Phaser's key objects,
+which stop updating while the scene is paused and would leave it half latched;
+`blur` clears it so a key released off-window cannot stick. It also swallows
+its own keys' side effects -- `M` would otherwise toggle mute, and
+`SPACE`/`UP` would start a jump.
+
+The gold heart is a real third frame on the heart texture, not a tint: Phaser
+tints multiply against the texture, so pink x gold comes out orange, not gold.
+
+### Dev hooks (append to the URL):
 
 | URL | Effect |
 |---|---|
