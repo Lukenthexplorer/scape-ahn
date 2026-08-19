@@ -48,8 +48,11 @@ mid-air fast-falls.
   him back. Pull far enough ahead and he trips over his own candy cane. Only
   obstacles end the run — AHN catching you *is* the death animation.
 - **Candy** sits at the apex of the jump you were already making. Grabbing one
-  scores and shoves AHN back, so greed and safety point the same way -- if you
-  jump well.
+  scores, shoves AHN back, and gives Nina a **sugar rush**: +5% speed per
+  lollipop, stacking to a hard +12% ceiling and decaying continuously, so it
+  has to be re-earned. The meter (top right) shows the cap as the bar's full
+  length and reads `MAX!` when you are on it. Boosted speed deliberately
+  exceeds `DIFFICULTY.SPEED_MAX` -- more score, less reaction time.
 - **AHN's swipe**: he is pressure, not a hitbox, with one exception. Pin him at
   maximum proximity long enough and he takes a telegraphed grab at Nina
   (`JUMP!` flashes, ~0.8s of windup). Jumping dodges it and scores; standing
@@ -131,6 +134,15 @@ take-off window (need 0.3). Max fair gap here is 0.34.
 
 This is not theoretical: instrumented bot runs were landing on top of the
 second obstacle in exactly the three patterns it flagged.
+
+The validator also pads "land, then jump again" gaps by the sugar-rush
+ceiling. Gaps are laid down in **pixels** at spawn while the jump arc scales
+with **speed**, so a boost makes every already-spawned gap worth fewer arcs;
+a 1.0-arc gap becomes 0.89 arcs at +12% and stops being clearable. Authored
+re-jump gaps are therefore held to `1.0 x (1 + CANDY.BOOST_MAX)`. Doubles need
+no padding -- a longer arc only widens their take-off window. This is also why
+the boost is a fraction rather than a flat `+80 px/s`: a flat bonus is +20% at
+the start and +9% at top speed, so no single margin would cover it.
 
 Dev hooks (append to the URL):
 
