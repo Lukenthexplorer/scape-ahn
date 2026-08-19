@@ -237,7 +237,10 @@ header comment in `tools/make_ahn_sheet.py`.
 ## Notes for the next iteration
 
 - Obstacle art (kimchi jar, spikes, idol dancer) is still procedural placeholder
-  shapes with an auto-generated keyline. They are sized against Nina's sprite,
+  shapes with an auto-generated keyline. The jar carries a "KIMCHI" paper label
+  drawn with a hand-plotted 3x5 bitmap font (`GLYPHS_3x5` in art.js) -- a
+  system font rasterised that small is mush and would not sit on the pixel
+  grid. Add glyphs there if you want to label anything else. They are sized against Nina's sprite,
   so real art dropped in at the same frame sizes needs no retuning.
 - Nina only has a real run cycle; jump / fall / duck / hurt are re-posed from
   it. Real frames for those are the highest-value art upgrade left.

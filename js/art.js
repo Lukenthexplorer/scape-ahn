@@ -28,6 +28,37 @@ const PlaceholderArt = (function () {
     c.lineTo(pts[2], pts[3]); c.lineTo(pts[4], pts[5]); c.closePath(); c.fill();
   };
 
+  /* --- tiny 3x5 bitmap font ---------------------------------------------
+   * Hand-plotted rather than canvas fillText: a system font rasterised at
+   * 5px high is mush, and it would not sit on the pixel grid. Each glyph is
+   * five rows of three columns; drawn in DESIGN px, so artScale turns every
+   * dot into a clean 2x2 block. Add glyphs as labels need them.
+   * --------------------------------------------------------------------- */
+  const GLYPHS_3x5 = {
+    K: ['X.X', 'XX.', 'X..', 'XX.', 'X.X'],
+    I: ['XXX', '.X.', '.X.', '.X.', 'XXX'],
+    M: ['X.X', 'XXX', 'X.X', 'X.X', 'X.X'],
+    C: ['XXX', 'X..', 'X..', 'X..', 'XXX'],
+    H: ['X.X', 'X.X', 'XXX', 'X.X', 'X.X'],
+  };
+
+  /** Width in design px of `str` rendered with the 3x5 font. */
+  function pixelTextWidth(str) { return str.length * 4 - 1; }
+
+  /** Draw `str` at (x, y) as 1px blocks. Unknown characters are skipped. */
+  function pixelText(c, x, y, str, color) {
+    c.fillStyle = color;
+    for (let i = 0; i < str.length; i++) {
+      const g = GLYPHS_3x5[str[i]];
+      if (!g) continue;
+      for (let row = 0; row < g.length; row++) {
+        for (let col = 0; col < 3; col++) {
+          if (g[row][col] === 'X') c.fillRect(x + i * 4 + col, y + row, 1, 1);
+        }
+      }
+    }
+  }
+
   /** Image key used for one file inside an ASSETS `sources` list. */
   function sourceKey(assetKey, srcName, index) {
     return assetKey + '__' + srcName + index;
@@ -276,7 +307,15 @@ const PlaceholderArt = (function () {
     r(c, 10, 21 + (f ? -1 : 0), 5, 4, '#d9603f');
     r(c, 18, 25 + (f ? 1 : 0), 7, 4, '#e0724a');
     r(c, 14, 28, 4, 3, '#8f2f1e');
-    r(c, 7, 13, 3, 18, 'rgba(255,255,255,0.28)');
+
+    // Paper label, like the jars painted on the comic panels.
+    const label = 'KIMCHI';
+    const lw = pixelTextWidth(label);              // 23 design px
+    r(c, 4, 19, 28, 9, '#f0e2c4');                 // label paper
+    r(c, 4, 19, 28, 1, '#d8c49f');                 // top shadow line
+    pixelText(c, Math.round((36 - lw) / 2), 21, label, '#8f2f1e');
+
+    r(c, 7, 13, 3, 18, 'rgba(255,255,255,0.28)');  // glass highlight, over the label
     r(c, 4, 33, 28, 3, P.kimchiDark);
   }
 
