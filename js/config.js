@@ -412,7 +412,7 @@ const CANDY = {
  * ---------------------------------------------------------------------
  * Rain rolls through in bands so the street is not visually static over a
  * long run. Cosmetic only -- it never changes physics or visibility enough
- * to affect play.
+ * to affect play. Phase 1 only: phase 2 is underground (see updateWeather).
  * ------------------------------------------------------------------- */
 const WEATHER = {
   ENABLED: true,

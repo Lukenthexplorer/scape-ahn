@@ -133,6 +133,18 @@ class GameScene extends Phaser.Scene {
 
   updateWeather() {
     if (!WEATHER.ENABLED || !this.rain) return;
+
+    // Phase 2 is underground: no sky, so no rain. Without this the storm
+    // bands keep running on the subway platform, which is where the two
+    // features collided -- weather is distance-driven and knows nothing
+    // about phases, phase 2 is a reskin and knows nothing about weather.
+    if (this.phase !== 1) {
+      this.wetness = 0;
+      this.rainTint.setAlpha(0);
+      this.rain.emitting = false;
+      return;
+    }
+
     // Where we are in the dry -> wet -> dry cycle, as a 0..1 wetness.
     const phase = this.distance % WEATHER.PERIOD_PX;
     let wet = 0;
