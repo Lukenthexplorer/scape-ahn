@@ -48,13 +48,37 @@ const BACKGROUND = {
  * broken panel, so you can add 04/05 to the list before the art exists.
  * ------------------------------------------------------------------- */
 const LORE = {
+  /* One entry per panel: the image and its caption travel together, so adding
+   * a beat to the story is a single object here and nothing else anywhere. */
   PANELS: [
-    'assets/sprites/lore/01.jpg',
-    'assets/sprites/lore/02.jpg',
-    'assets/sprites/lore/03.jpg',
-    // 'assets/sprites/lore/04.jpg',   <- drop the file in, uncomment, done
-    // 'assets/sprites/lore/05.jpg',
+    { img: 'assets/sprites/lore/01.jpg',
+      text: '"Psst... quer um docinho, pequena?"' },
+    { img: 'assets/sprites/lore/02.jpg',
+      text: 'Nina sabia. Doce demais pra ser verdade.' },
+    { img: 'assets/sprites/lore/03.jpg',
+      text: 'E lá se foi ela — correndo pela própria vida (e pelos potes de kimchi).' },
+    // { img: 'assets/sprites/lore/04.jpg', text: '...' },   <- drop the file in, uncomment, done
+    // { img: 'assets/sprites/lore/05.jpg', text: '...' },
   ],
+
+  /* Comic caption box. Cream card with a hard black border, the way a
+   * narration box reads in print -- it has to hold its own against very busy
+   * pixel art, which a plain drop-shadowed label does not. */
+  CAPTION: {
+    FONT: '"Press Start 2P"',   // loaded in index.html; falls back to monospace
+    FALLBACK: 'monospace',
+    SIZE: 15,
+    LINE_SPACING: 10,
+    COLOR: '#1a1014',
+    BG: 0xf5e6c8,
+    BORDER: 0x1a1014,
+    BORDER_PX: 4,
+    PAD_X: 20,
+    PAD_Y: 14,
+    MAX_WIDTH: 0.80,            // fraction of the canvas the box may occupy
+    BOTTOM_MARGIN: 44,          // px from the bottom edge to the box's underside
+  },
+
   FADE_MS: 350,            // fade-to-black between panels and on exit
   HINT_DELAY_MS: 1500,     // how long a panel is up before "tap to continue"
   ONCE_PER_SESSION: false, // true = show it only on the first load per tab

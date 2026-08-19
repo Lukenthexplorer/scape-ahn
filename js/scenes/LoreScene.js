@@ -14,6 +14,20 @@
 class LoreScene extends Phaser.Scene {
   constructor() { super('Lore'); }
 
+  /**
+   * Ask the browser to actually fetch the caption face. Safe to call more
+   * than once (BootScene warms it up so it is usually ready before the first
+   * panel is drawn). Resolves false if the font is unavailable, in which case
+   * the caption keeps its monospace fallback and the game carries on.
+   */
+  static loadCaptionFont() {
+    const spec = LORE.CAPTION.SIZE + 'px ' + LORE.CAPTION.FONT;
+    if (!document.fonts || !document.fonts.load) return Promise.resolve(false);
+    return document.fonts.load(spec)
+      .then((fonts) => fonts.length > 0)
+      .catch(() => false);
+  }
+
   /** Should the intro play at all? Checked by BootScene. */
   static shouldPlay() {
     if (!LORE.PANELS.length) return false;
@@ -31,16 +45,16 @@ class LoreScene extends Phaser.Scene {
       console.warn('[lore] panel missing, skipping:', file.src);
       this.failed[file.key] = true;
     });
-    LORE.PANELS.forEach((path, i) => this.load.image(this.panelKey(i), path));
+    LORE.PANELS.forEach((panel, i) => this.load.image(this.panelKey(i), panel.img));
   }
 
   panelKey(i) { return 'lore' + i; }
 
   create() {
-    // Only the panels that actually arrived.
+    // Only the panels that actually arrived, image and caption kept together.
     this.panels = LORE.PANELS
-      .map((path, i) => this.panelKey(i))
-      .filter((key) => !this.failed[key] && this.textures.exists(key));
+      .map((panel, i) => ({ key: this.panelKey(i), text: panel.text || '' }))
+      .filter((p) => !this.failed[p.key] && this.textures.exists(p.key));
 
     if (!this.panels.length) { this.finish(true); return; }
 
@@ -52,10 +66,12 @@ class LoreScene extends Phaser.Scene {
 
     // The panel itself. One image object, re-pointed at each texture, so
     // there is nothing to create or destroy as the story advances.
-    this.panel = this.add.image(GAME.WIDTH / 2, GAME.HEIGHT / 2, this.panels[0]).setDepth(1);
+    this.panel = this.add.image(GAME.WIDTH / 2, GAME.HEIGHT / 2, this.panels[0].key).setDepth(1);
     this.fitPanel();
 
     this.buildUi();
+    this.buildCaption();
+    this.setCaption(this.panels[0].text);
     this.bindInput();
 
     this.cameras.main.fadeIn(LORE.FADE_MS, 0, 0, 0);
@@ -75,6 +91,58 @@ class LoreScene extends Phaser.Scene {
     const scale = Math.min(GAME.WIDTH / tex.width, GAME.HEIGHT / tex.height);
     this.panel.setScale(scale);
     this.panel.setPosition(GAME.WIDTH / 2, GAME.HEIGHT / 2);
+  }
+
+  /* ==================================================================
+   * CAPTION BOX
+   * ------------------------------------------------------------------
+   * A comic narration card: cream fill, hard black border, pixel font.
+   * It has to hold its own over very busy pixel art, which is why it is a
+   * solid card rather than text with a shadow.
+   *
+   * The box is sized to its text after wrapping, not fixed, so a one-line
+   * caption does not sit in an oversized frame.
+   * ================================================================== */
+  buildCaption() {
+    const C = LORE.CAPTION;
+    this.caption = this.add.container(GAME.WIDTH / 2, 0).setDepth(9);
+
+    this.captionBg = this.add.rectangle(0, 0, 10, 10, C.BG)
+      .setStrokeStyle(C.BORDER_PX, C.BORDER);
+    this.captionText = this.add.text(0, 0, '', {
+      fontFamily: C.FONT + ', ' + C.FALLBACK,
+      fontSize: C.SIZE + 'px',
+      color: C.COLOR,
+      align: 'center',
+      lineSpacing: C.LINE_SPACING,
+      wordWrap: { width: GAME.WIDTH * C.MAX_WIDTH - C.PAD_X * 2 },
+    }).setOrigin(0.5);
+
+    this.caption.add(this.captionBg);
+    this.caption.add(this.captionText);
+
+    // Canvas text does NOT reliably trigger a webfont download -- the browser
+    // only fetches a font when the DOM asks for it, and Phaser never touches
+    // the DOM. So request it explicitly, then re-lay the box out once it
+    // lands; without this the caption silently stays in the fallback face.
+    LoreScene.loadCaptionFont().then((ok) => {
+      if (ok && this.scene.isActive() && this.captionText) this.setCaption(this.currentText);
+    });
+  }
+
+  setCaption(text) {
+    this.currentText = text || '';
+    if (!this.currentText) { this.caption.setVisible(false); return; }
+
+    const C = LORE.CAPTION;
+    this.caption.setVisible(true);
+    this.captionText.setText(this.currentText);
+
+    // Size the card to the wrapped text, then sit it above the dots and hint.
+    const w = Math.ceil(this.captionText.width) + C.PAD_X * 2;
+    const h = Math.ceil(this.captionText.height) + C.PAD_Y * 2;
+    this.captionBg.setSize(w, h);
+    this.caption.y = GAME.HEIGHT - C.BOTTOM_MARGIN - h / 2;
   }
 
   /* ==================================================================
@@ -163,8 +231,9 @@ class LoreScene extends Phaser.Scene {
     this.cameras.main.fadeOut(LORE.FADE_MS, 0, 0, 0);
     this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
       this.index += 1;
-      this.panel.setTexture(this.panels[this.index]);
+      this.panel.setTexture(this.panels[this.index].key);
       this.fitPanel();
+      this.setCaption(this.panels[this.index].text);
       this.refreshDots();
       this.cameras.main.fadeIn(LORE.FADE_MS, 0, 0, 0);
       this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_IN_COMPLETE, () => {

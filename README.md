@@ -64,11 +64,30 @@ mid-air fast-falls.
 (config.js) and shown in order, scaled to fit while preserving aspect ratio --
 letterboxed on black, never stretched.
 
-**Adding panels 4 and 5 is one line each**: drop the file into
-`assets/sprites/lore/` and uncomment its entry. The scene reads the array's
+Each entry carries its image **and** its caption, so a story beat is one object:
+
+```js
+{ img: 'assets/sprites/lore/01.jpg',
+  text: '"Psst... quer um docinho, pequena?"' },
+```
+
+**Adding panels 4 and 5 is one entry each**: drop the file into
+`assets/sprites/lore/` and uncomment its line. The scene reads the array's
 length for everything (progress dots included), and a listed file that fails to
 load is skipped rather than shown broken, so you can list panels before their
-art exists.
+art exists. An entry with no `text` simply shows no caption.
+
+Captions render as a comic narration card -- cream fill, hard black border,
+`Press Start 2P` -- sized to the wrapped text rather than fixed, and styled
+via `LORE.CAPTION`.
+
+One non-obvious thing about the font: **canvas text does not trigger a webfont
+download**. The browser only fetches a face when the DOM asks for it, and
+Phaser never touches the DOM, so the caption silently renders in the fallback
+unless the font is requested explicitly. `LoreScene.loadCaptionFont()` does
+that (warmed up in BootScene, re-laying the box out when it lands). If the font
+is unavailable -- offline, say -- the caption falls back to monospace and the
+game carries on.
 
 `LORE.ONCE_PER_SESSION: true` limits it to the first load per tab.
 

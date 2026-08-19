@@ -35,6 +35,10 @@ class BootScene extends Phaser.Scene {
     // NOTE: audio is NOT loaded here on purpose -- see js/audio.js. It is
     // fetched in the background so a slow track can never stall the boot.
 
+    // Warm the comic's pixel font while the sprites load, so the first
+    // caption is already in the right face when LoreScene draws it.
+    LoreScene.loadCaptionFont();
+
     // Simple loading bar (matters once real assets exist).
     const g = this.add.graphics();
     this.load.on('progress', (p) => {
