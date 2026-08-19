@@ -280,8 +280,15 @@ class ObstacleSpawner {
    * because a short arc makes every obstacle a bigger fraction of it.
    */
   static validatePatterns() {
-    const REJUMP = DIFFICULTY.PATTERN_REJUMP_MIN_ARC;
     const MIN_WINDOW = DIFFICULTY.PATTERN_MIN_WINDOW_ARC;
+
+    /* Gaps are laid down in PIXELS at spawn, but the jump arc grows with
+     * speed, so a sugar rush makes every already-spawned gap worth fewer
+     * arcs. A "land, then jump again" gap that slips under 1.0 arcs stops
+     * being clearable, so authored gaps are held to the boosted worst case.
+     * Doubles need no such padding: a longer arc only widens their window. */
+    const boost = (typeof CANDY !== 'undefined' && CANDY.ENABLED) ? CANDY.BOOST_MAX : 0;
+    const REJUMP = DIFFICULTY.PATTERN_REJUMP_MIN_ARC * (1 + boost);
     let bad = 0;
 
     PATTERNS.forEach((p) => {
@@ -296,12 +303,20 @@ class ObstacleSpawner {
         if (involvesDuck) {
           if (gap < REJUMP) {
             console.warn('[patterns] "' + p.name + '" item ' + i + ': ' + gap +
-              ' arcs next to a duck. You cannot duck and jump at once; needs >= ' + REJUMP);
+              ' arcs next to a duck. You cannot duck and jump at once; needs >= ' +
+              REJUMP.toFixed(2) + ' (includes the ' + Math.round(boost * 100) + '% sugar-rush margin)');
             bad++;
           }
           continue;
         }
         if (gap >= REJUMP) continue;            // land, then jump again: always fine
+        if (gap >= DIFFICULTY.PATTERN_REJUMP_MIN_ARC) {
+          console.warn('[patterns] "' + p.name + '" item ' + i + ': ' + gap +
+            ' arcs is clearable at base speed but not at full sugar rush; needs >= ' +
+            REJUMP.toFixed(2));
+          bad++;
+          continue;
+        }
 
         // --- it is a double: check the take-off window ---------------------
         const a = ObstacleSpawner.itemSize(prev), b = ObstacleSpawner.itemSize(cur);

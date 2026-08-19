@@ -310,19 +310,19 @@ const PATTERNS = [
   { name: 'jar-spike',      minI: 0.30, weight: 4,  items: [{ type: 'kimchi' }, { type: 'spike',  gap: 0.32 }] },
 
   // --- land-and-jump-again rhythms --------------------------------------
-  { name: 'two-beat',       minI: 0.25, weight: 6,  items: [{ type: 'spike' },  { type: 'spike',  gap: 1.15 }] },
-  { name: 'three-beat',     minI: 0.45, weight: 4,  items: [{ type: 'kimchi' }, { type: 'spike',  gap: 1.12 },
-                                                            { type: 'kimchi', gap: 1.12 }] },
+  { name: 'two-beat',       minI: 0.25, weight: 6,  items: [{ type: 'spike' },  { type: 'spike',  gap: 1.20 }] },
+  { name: 'three-beat',     minI: 0.45, weight: 4,  items: [{ type: 'kimchi' }, { type: 'spike',  gap: 1.20 },
+                                                            { type: 'kimchi', gap: 1.20 }] },
 
   // --- mixed inputs: jump, then duck, then jump -------------------------
-  { name: 'jump-duck',      minI: 0.38, weight: 4,  items: [{ type: 'spike' },  { type: 'idol-high', gap: 1.30 }] },
-  { name: 'duck-jump',      minI: 0.45, weight: 4,  items: [{ type: 'idol-high' }, { type: 'kimchi', gap: 1.30 }] },
+  { name: 'jump-duck',      minI: 0.38, weight: 4,  items: [{ type: 'spike' },  { type: 'idol-high', gap: 1.32 }] },
+  { name: 'duck-jump',      minI: 0.45, weight: 4,  items: [{ type: 'idol-high' }, { type: 'kimchi', gap: 1.32 }] },
   { name: 'duck-double',    minI: 0.62, weight: 3,  items: [{ type: 'idol-high' }, { type: 'spike', gap: 1.35 },
                                                             { type: 'kimchi', gap: 0.44 }] },
 
   // --- late-game showpieces ---------------------------------------------
   { name: 'gauntlet',       minI: 0.70, weight: 3,  items: [{ type: 'spike' },  { type: 'kimchi', gap: 0.40 },
-                                                            { type: 'spike',  gap: 1.25 }] },
+                                                            { type: 'spike',  gap: 1.28 }] },
   { name: 'idol-sandwich',  minI: 0.78, weight: 2,  items: [{ type: 'idol-low' }, { type: 'idol-high', gap: 1.35 },
                                                             { type: 'kimchi', gap: 1.30 }] },
 ];
@@ -342,6 +342,23 @@ const CANDY = {
   SCORE: 90,
   AHN_PUSHBACK: 20,       // px of skill credit, same currency as a near miss
   BODY: { w: 40, h: 40, ox: 8, oy: 8 },
+
+  /* SUGAR RUSH -- each lollipop makes Nina faster, up to a hard ceiling.
+   *
+   * The boost is a FRACTION of the current speed, not a flat px/s, and that
+   * is load-bearing rather than a style choice: obstacle gaps are laid down
+   * in pixels at spawn time, while the jump arc scales with speed. Going
+   * faster therefore makes every already-spawned gap worth FEWER arcs, and a
+   * "land, then jump again" gap that drops under 1.0 arcs becomes unclearable.
+   * A fractional boost stretches the arc by a known factor at any speed, so
+   * validatePatterns() can hold the authored gaps to that worst case. A flat
+   * +80 px/s could not: it is +20% at the start and +9% at top speed.
+   *
+   * Consequence to keep in mind: boosted speed deliberately exceeds
+   * DIFFICULTY.SPEED_MAX. That is the trade -- more score, less reaction time. */
+  BOOST_ADD: 0.05,        // +5% per lollipop
+  BOOST_MAX: 0.12,        // hard ceiling: +12%, no matter how many you grab
+  BOOST_DECAY: 0.022,     // fraction lost per second, so it has to be re-earned
 };
 
 /* ---------------------------------------------------------------------
@@ -538,6 +555,7 @@ const ASSETS = {
   // Small UI / FX textures (placeholders).
   dust:  { key: 'dust',  path: null, frameWidth: 12, frameHeight: 12, frameCount: 1, artScale: 2, anims: {} },
   drop:  { key: 'drop',  path: null, frameWidth: 2,  frameHeight: 14, frameCount: 1, anims: {} },
+  streak: { key: 'streak', path: null, frameWidth: 26, frameHeight: 2, frameCount: 1, anims: {} },
   heart: { key: 'heart', path: null, frameWidth: 40, frameHeight: 36, frameCount: 2, artScale: 2, anims: {} },
 };
 

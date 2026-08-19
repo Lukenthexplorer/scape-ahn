@@ -391,6 +391,12 @@ const PlaceholderArt = (function () {
     r(c, 10, 5, 3, 2, 'rgba(255,255,255,0.8)');      // highlight
   }
 
+  /* SPEED STREAK -- 26x2 horizontal line, drawn at final size. */
+  function drawStreak(c) {
+    r(c, 0, 0, 26, 2, 'rgba(255,214,240,0.55)');
+    r(c, 18, 0, 8, 2, 'rgba(255,255,255,0.9)');   // brighter leading end
+  }
+
   /* RAINDROP -- 2x14, drawn at final size (no artScale). */
   function drawDrop(c) {
     r(c, 0, 0, 2, 14, 'rgba(190,214,255,0.55)');
@@ -406,7 +412,7 @@ const PlaceholderArt = (function () {
 
   const DRAWERS = {
     girl: drawGirl, ahn: drawAhn, kimchi: drawKimchi, spike: drawSpike,
-    idol: drawIdol, candy: drawCandy, dust: drawDust, drop: drawDrop,
+    idol: drawIdol, candy: drawCandy, dust: drawDust, drop: drawDrop, streak: drawStreak,
     heart: drawHeart,
   };
 

@@ -27,6 +27,7 @@ class GameScene extends Phaser.Scene {
     this.lives = PLAYER.LIVES;
     this.hits = 0;
     this.cleanDistance = 0;   // px since the last hit; feeds AHN's trip gag
+    this.speedBoost = 0;      // sugar rush, as a fraction of base speed (see CANDY)
     this.running = true;
     this.isOver = false;
 
@@ -69,6 +70,19 @@ class GameScene extends Phaser.Scene {
       scale: { start: 1, end: 0 }, alpha: { start: 0.8, end: 0 },
       lifespan: { min: 200, max: 420 }, gravityY: 420, emitting: false,
     }).setDepth(12);
+
+    // Speed lines, only while the sugar rush is up.
+    this.streaks = this.add.particles(0, 0, 'streak', {
+      x: GAME.WIDTH + 30,
+      y: { min: 60, max: GAME.GROUND_Y - 10 },
+      speedX: { min: -1500, max: -1000 },
+      lifespan: 700,
+      quantity: 1,
+      frequency: 60,
+      alpha: { start: 0.9, end: 0 },
+      scaleX: { min: 0.7, max: 1.8 },
+      emitting: false,
+    }).setDepth(19);
 
     this.buildWeather();
   }
@@ -156,6 +170,22 @@ class GameScene extends Phaser.Scene {
         this.hearts.push(this.add.image(30 + i * 38, 30, 'heart', 0).setScale(0.8).setDepth(100));
       }
     }
+
+    /* Sugar-rush meter. The bar's full length IS the cap, so hitting the end
+     * is what "maxed out" looks like -- the ceiling is shown, not just
+     * enforced. Hidden entirely when the boost is zero. */
+    this.boostUi = this.add.container(GAME.WIDTH - 20, 92).setDepth(100).setAlpha(0);
+    this.boostUi.add(this.add.text(-118, -2, 'SUGAR', {
+      fontFamily: F, fontSize: '13px', color: '#ff8ab4',
+    }).setOrigin(0, 0.5));
+    this.boostUi.add(this.add.rectangle(0, 0, 112, 10, 0x2b1c36)
+      .setOrigin(1, 0.5).setStrokeStyle(2, 0x6b4a7a));
+    this.boostBar = this.add.rectangle(-110, 0, 0, 6, 0xff5c9e).setOrigin(0, 0.5);
+    this.boostUi.add(this.boostBar);
+    this.boostMaxText = this.add.text(6, -2, 'MAX!', {
+      fontFamily: F, fontSize: '13px', color: PAL.uiWarn,
+    }).setOrigin(0, 0.5).setAlpha(0);
+    this.boostUi.add(this.boostMaxText);
 
     // Reserved for the swipe telegraph. General "he's close" pressure is the
     // vignette's job -- a permanent warning label is noise.
@@ -327,7 +357,12 @@ class GameScene extends Phaser.Scene {
        * ------------------------------------------------------------- */
       const raw = Phaser.Math.Clamp(this.distance / DIFFICULTY.RAMP_DISTANCE, 0, 1);
       this.intensity = Math.pow(raw, DIFFICULTY.RAMP_CURVE);
-      this.speed = Phaser.Math.Linear(DIFFICULTY.SPEED_START, DIFFICULTY.SPEED_MAX, this.intensity);
+
+      // Sugar rush decays continuously, so it has to be re-earned; it rides on
+      // top of the ramp and deliberately pushes past SPEED_MAX.
+      this.speedBoost = Math.max(0, this.speedBoost - CANDY.BOOST_DECAY * dt);
+      const baseSpeed = Phaser.Math.Linear(DIFFICULTY.SPEED_START, DIFFICULTY.SPEED_MAX, this.intensity);
+      this.speed = baseSpeed * (1 + this.speedBoost);
 
       const dDist = this.speed * dt;
       this.distance += dDist;
@@ -361,8 +396,13 @@ class GameScene extends Phaser.Scene {
 
       /* --- 5. CHARACTERS -------------------------------------------- */
       // Sell the acceleration: the run cycle plays faster as the world does.
-      this.player.anims.timeScale = 0.85 + 0.75 * this.intensity;
+      // Driven by real speed, not the ramp, so a sugar rush is visible in her
+      // legs and not only in the HUD.
+      const speedRatio = this.speed / DIFFICULTY.SPEED_START;
+      this.player.anims.timeScale = Phaser.Math.Clamp(0.85 * speedRatio, 0.85, 2.4);
       this.ahn.anims.timeScale = 0.7 + 0.4 * this.intensity;   // he lopes, she sprints
+
+      this.streaks.emitting = this.speedBoost > 0.005;
 
       this.updateDuck();
       this.player.tick();
@@ -385,6 +425,13 @@ class GameScene extends Phaser.Scene {
     } else {
       this.multText.setAlpha(0);
     }
+
+    // Sugar meter: fill is boost/cap, so a full bar reads as "capped".
+    const frac = Phaser.Math.Clamp(this.speedBoost / CANDY.BOOST_MAX, 0, 1);
+    this.boostUi.setAlpha(frac > 0.01 ? 1 : Math.max(0, this.boostUi.alpha - 0.06));
+    this.boostBar.width = 108 * frac;
+    this.boostBar.fillColor = frac >= 0.999 ? 0xffd84a : 0xff5c9e;
+    this.boostMaxText.setAlpha(frac >= 0.999 ? 1 : 0);
 
     // Vignette tracks AHN's proximity continuously -- no state, no tweens.
     const prox = this.ahn.proximity();
@@ -459,9 +506,15 @@ class GameScene extends Phaser.Scene {
     const bonus = Math.round(CANDY.SCORE * this.multiplier);
     this.score += bonus;
     this.ahn.addCredit(CANDY.AHN_PUSHBACK);
+
+    const wasCapped = this.speedBoost >= CANDY.BOOST_MAX - 1e-6;
+    this.speedBoost = Math.min(CANDY.BOOST_MAX, this.speedBoost + CANDY.BOOST_ADD);
+
     Sfx.play('candy');
     this.spawnDust(candy.x, candy.y + 20, 10);
-    this.popup('+' + bonus, '#ff8ab4');
+    this.popup('+' + bonus + (wasCapped ? '' : '  SPEED+'), '#ff8ab4');
+    // A small kick so the acceleration is felt, not only metered.
+    this.cameras.main.shake(90, 0.003);
     candy.deactivate();
   }
 
@@ -560,6 +613,8 @@ class GameScene extends Phaser.Scene {
     this.candies.getChildren().forEach((c) => { if (c.active) c.body.setVelocityX(0); });
     this.warnText.setAlpha(0);
     if (this.rain) this.rain.emitting = false;
+    if (this.streaks) this.streaks.emitting = false;
+    this.boostUi.setAlpha(0);
 
     this.cameras.main.shake(260, 0.008);
     this.ahn.startCatch(AHN.X_LUNGE, () => {
