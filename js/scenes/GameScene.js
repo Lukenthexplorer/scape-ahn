@@ -235,7 +235,7 @@ class GameScene extends Phaser.Scene {
       /* --- 5. CHARACTERS -------------------------------------------- */
       // Sell the acceleration: the run cycle plays faster as the world does.
       this.player.anims.timeScale = 0.85 + 0.75 * this.intensity;
-      this.ahn.anims.timeScale = 0.9 + 0.6 * this.intensity;
+      this.ahn.anims.timeScale = 0.7 + 0.4 * this.intensity;   // he lopes, she sprints
 
       this.updateDuck();
       this.player.tick();

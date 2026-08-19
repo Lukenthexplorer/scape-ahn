@@ -60,7 +60,7 @@ class Ahn extends Phaser.GameObjects.Sprite {
     this.x = Phaser.Math.Linear(this.x, this.targetX, t);
 
     // Loping bob so he reads as running even while nearly stationary on screen.
-    if (!this.tripping) this.y = this.baseY + Math.sin(this.scene.time.now * 0.011) * 3;
+    if (!this.tripping) this.y = this.baseY + Math.sin(this.scene.time.now * 0.007) * 3;
 
     this.maybeTrip();
   }
@@ -70,7 +70,7 @@ class Ahn extends Phaser.GameObjects.Sprite {
     if (this.tripping || this.catching) return;
     const now = this.scene.time.now;
     if (now < this.nextTripAt) return;
-    if (this.x > AHN.TRIP_WHEN_X_BELOW) return;    // still too close to be funny
+    if (this.credit < AHN.TRIP_CREDIT_MIN) return;   // you have not earned it yet
 
     this.tripping = true;
     this.play('ahn-trip');
@@ -89,7 +89,7 @@ class Ahn extends Phaser.GameObjects.Sprite {
     this.scene.tweens.killTweensOf(this);
     this.scene.tweens.add({
       targets: this, x: targetX, y: this.baseY,
-      duration: 520, ease: 'Back.easeIn',
+      duration: 700, ease: 'Back.easeIn',
       onComplete: () => { if (onArrive) onArrive(); },
     });
   }

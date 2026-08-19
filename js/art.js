@@ -94,6 +94,27 @@ const PlaceholderArt = (function () {
    * COMPOSITOR -- builds frames out of real source images
    * ================================================================== */
 
+  /**
+   * Resample a source image to `k` times its size, with smoothing ON.
+   *
+   * This is a deliberate two-step: shrink smoothly here, then let the strip's
+   * integer artScale blow the result back up with smoothing OFF. Doing it in
+   * one pass instead (drawing the source at k * artScale) would either blur
+   * the final sprite or, with nearest, leave ragged uneven pixel blocks.
+   * Two steps give a clean sprite that still sits on the same pixel grid as
+   * everything else in the game.
+   */
+  function resampled(img, k) {
+    const cv = document.createElement('canvas');
+    cv.width = Math.max(1, Math.round(img.width * k));
+    cv.height = Math.max(1, Math.round(img.height * k));
+    const c = cv.getContext('2d');
+    c.imageSmoothingEnabled = true;
+    c.imageSmoothingQuality = 'high';
+    c.drawImage(img, 0, 0, cv.width, cv.height);
+    return cv;
+  }
+
   /** Returns a canvas holding `img` with a flat colour burned over its pixels. */
   function tinted(img, color, alpha) {
     const cv = document.createElement('canvas');
@@ -115,6 +136,10 @@ const PlaceholderArt = (function () {
    *   dy       - nudge up/down (jump/fall poses)
    *   squashY  - vertical scale, still bottom-aligned (duck poses)
    *   tint     - flat colour burn (hurt pose)
+   *
+   * The asset-level `sourceScale` resizes the source art before any of that,
+   * which is how a character can be made smaller than its source files
+   * without leaving the pixel grid (see `resampled`).
    */
   function drawComposed(scene, asset, ctx, i, fw, fh) {
     const spec = asset.compose[i];
@@ -124,6 +149,7 @@ const PlaceholderArt = (function () {
     if (!scene.textures.exists(key)) return false;      // file missing -> placeholder
 
     let img = scene.textures.get(key).getSourceImage();
+    if (asset.sourceScale && asset.sourceScale !== 1) img = resampled(img, asset.sourceScale);
     const sw = img.width, sh = img.height;
     if (spec.tint) img = tinted(img, spec.tint, spec.tintAlpha != null ? spec.tintAlpha : 0.5);
 

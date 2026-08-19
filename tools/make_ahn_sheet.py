@@ -20,9 +20,13 @@ import sys, os
 from PIL import Image, ImageDraw, ImageEnhance
 
 # ---- frame geometry: MUST match ASSETS.ahn in js/config.js ----------------
-# Drawn in a 44x56 design grid, exported at OUT_SCALE for a final 88x112 sheet
-# (the girl's art is upscaled 2x the same way, so both share a pixel size).
-FW, FH, COUNT = 44, 56, 9
+# Drawn in a 56x76 design grid, exported at OUT_SCALE for a final 112x152 sheet.
+# The girl's art is upscaled 2x the same way, so both share one pixel size --
+# do NOT make him bigger by raising OUT_SCALE, that would give him chunkier
+# pixels than her. Grow the design grid instead, as done here.
+# He stands ~148px tall against her 84px: towering, and lanky rather than
+# simply inflated (the extra height goes into legs and torso, not the head).
+FW, FH, COUNT = 56, 76, 9
 OUT_SCALE = 2
 GROUND = FH - 1              # feet line inside the frame
 
@@ -37,7 +41,7 @@ WARN      = (255, 216, 74, 255)
 PHOTO = sys.argv[1] if len(sys.argv) > 1 else 'assets/sprites/ahn/IMG_6044.jpg'
 OUT   = 'assets/sprites/ahn/ahn.png'
 
-HEAD_W, HEAD_H = 17, 19
+HEAD_W, HEAD_H = 21, 24
 FACE_CROP = (126, 46, 344, 344)   # hair-top to chin in the source photo
 
 
@@ -79,44 +83,44 @@ def build_head():
 
 def draw_body(d, frame, stride, bob, reach):
     """Everything below the neck. `reach` > 0 = arms thrown forward (catch)."""
-    top = 19 + bob                      # shoulder line
+    top = 26 + bob                      # shoulder line
 
     # --- legs: long spindly stilts, alternating stride --------------------
-    d.rectangle((17 + stride, 38 + bob, 20 + stride, GROUND - 2), fill=BLACK)
-    d.rectangle((24 - stride, 38 + bob, 27 - stride, GROUND - 2), fill=BLACK)
-    d.rectangle((15 + stride, GROUND - 2, 22 + stride, GROUND), fill=SHOE)   # pointy shoes
-    d.rectangle((23 - stride, GROUND - 2, 30 - stride, GROUND), fill=SHOE)
+    d.rectangle((22 + stride, 50 + bob, 26 + stride, GROUND - 3), fill=BLACK)
+    d.rectangle((30 - stride, 50 + bob, 34 - stride, GROUND - 3), fill=BLACK)
+    d.rectangle((18 + stride, GROUND - 3, 28 + stride, GROUND), fill=SHOE)   # pointy shoes
+    d.rectangle((29 - stride, GROUND - 3, 39 - stride, GROUND), fill=SHOE)
 
     # --- torso: vertical candy-cane stripes (sinister barber pole) --------
-    x0, y0, x1, y1 = 15, top + 1, 29, 39 + bob
+    x0, y0, x1, y1 = 20, top + 1, 38, 52 + bob
     d.rectangle((x0, y0, x1, y1), fill=RED)
-    for sx in range(x0, x1, 5):
-        d.rectangle((sx, y0, sx + 2, y1), fill=BLACK)
-    d.rectangle((x0 - 2, y0, x1 + 2, y0 + 2), fill=RED_LIGHT)   # collar
-    d.rectangle((20, y0 + 1, 23, y0 + 3), fill=PALE)            # bow tie
+    for sx in range(x0, x1, 6):
+        d.rectangle((sx, y0, sx + 3, y1), fill=BLACK)
+    d.rectangle((x0 - 3, y0, x1 + 3, y0 + 3), fill=RED_LIGHT)   # collar
+    d.rectangle((26, y0 + 2, 31, y0 + 5), fill=PALE)            # bow tie
 
     # --- arms -------------------------------------------------------------
-    swing = -2 if frame == 0 else (2 if frame == 2 else 0)
+    swing = -3 if frame == 0 else (3 if frame == 2 else 0)
     if reach:
         # Reaching forward for the grab, with clawed hands.
-        d.rectangle((29, top + 5, 40, top + 8), fill=RED_LIGHT)
-        d.rectangle((29, top + 10, 38, top + 13), fill=RED_LIGHT)
-        d.rectangle((39, top + 3, 42, top + 9), fill=PALE)
-        d.rectangle((37, top + 9, 41, top + 15), fill=PALE)
+        d.rectangle((38, top + 6, 51, top + 10), fill=RED_LIGHT)
+        d.rectangle((38, top + 13, 49, top + 17), fill=RED_LIGHT)
+        d.rectangle((50, top + 3, 54, top + 12), fill=PALE)
+        d.rectangle((47, top + 12, 52, top + 20), fill=PALE)
     else:
-        d.rectangle((11, top + 4 + swing, 14, top + 17 + swing), fill=RED_LIGHT)
-        d.rectangle((30, top + 4 - swing, 33, top + 17 - swing), fill=RED_LIGHT)
+        d.rectangle((14, top + 5 + swing, 19, top + 24 + swing), fill=RED_LIGHT)
+        d.rectangle((39, top + 5 - swing, 44, top + 24 - swing), fill=RED_LIGHT)
 
 
 def draw_cane(d, tripping):
     """The candy cane he keeps tripping over."""
-    cx = 34 if not tripping else 36
-    cy = 24 if not tripping else 34
-    d.rectangle((cx, cy, cx + 2, cy + 22), fill=PALE)
-    for s in range(0, 22, 6):                       # red twist
-        d.rectangle((cx, cy + s, cx + 2, cy + s + 2), fill=RED_LIGHT)
-    d.rectangle((cx, cy - 5, cx + 7, cy - 3), fill=PALE)        # hook
-    d.rectangle((cx + 5, cy - 5, cx + 7, cy + 1), fill=RED_LIGHT)
+    cx = 45 if not tripping else 47
+    cy = 31 if not tripping else 45
+    d.rectangle((cx, cy, cx + 3, cy + 31), fill=PALE)
+    for s in range(0, 31, 8):                       # red twist
+        d.rectangle((cx, cy + s, cx + 3, cy + s + 3), fill=RED_LIGHT)
+    d.rectangle((cx, cy - 7, cx + 9, cy - 4), fill=PALE)        # hook
+    d.rectangle((cx + 6, cy - 7, cx + 9, cy + 1), fill=RED_LIGHT)
 
 
 def build_frame(i, head):
@@ -128,12 +132,12 @@ def build_frame(i, head):
     catching = i >= 7
 
     # run cycle: 0/2 are the extended strides, 1/3 the passing poses (+bob)
-    stride = 4 if i == 0 else (-4 if i == 2 else 0)
+    stride = 5 if i == 0 else (-5 if i == 2 else 0)
     bob = 1 if i in (1, 3) else 0
     if tripping:
-        stride, bob = 5, 0
+        stride, bob = 6, 0
     if catching:
-        stride, bob = (2 if i == 7 else -2), 0
+        stride, bob = (3 if i == 7 else -3), 0
 
     draw_cane(d, tripping)
     draw_body(d, i, stride, bob, reach=catching)
@@ -156,8 +160,8 @@ def build_frame(i, head):
         img.alpha_composite(body, ((FW - body.width) // 2, max(0, FH - body.height)))
         if i == 6:                                   # cartoon impact star
             d2 = ImageDraw.Draw(img)
-            d2.rectangle((2, 12, 9, 14), fill=WARN)
-            d2.rectangle((4, 10, 6, 17), fill=WARN)
+            d2.rectangle((3, 16, 12, 19), fill=WARN)
+            d2.rectangle((6, 13, 9, 22), fill=WARN)
     return img
 
 

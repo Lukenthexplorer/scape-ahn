@@ -52,14 +52,14 @@ const PLAYER = {
   HIT_KNOCK_MS: 320,      // Stagger duration after a hit (visual only).
 
   // Collision boxes in FINAL frame px (frame is 96x128, origin at the feet).
-  // Measured against the real run art, which is 48x48 source upscaled 2x, so
-  // her silhouette lands at frame y 40..122, x 28..68. Deliberately narrower
+  // Measured against the real run art at ASSETS.girl.sourceScale 0.7, which
+  // puts her silhouette at frame y 64..127, x 27..66. Deliberately narrower
   // than the sprite -- the ponytail and trailing arm are not solid, and
   // generous hitboxes are what make an endless runner feel fair at speed.
-  BODY_STAND: { w: 40, h: 80, ox: 28, oy: 42 },
+  BODY_STAND: { w: 28, h: 60, ox: 32, oy: 67 },
   // The duck frames are the run art squashed to 55% height (ASSETS.girl
-  // .compose), putting her silhouette at frame y 80..126.
-  BODY_DUCK:  { w: 48, h: 42, ox: 24, oy: 80 },
+  // .compose), putting her silhouette at frame y 92..127.
+  BODY_DUCK:  { w: 32, h: 34, ox: 30, oy: 93 },
 };
 
 /* ---------------------------------------------------------------------
@@ -70,22 +70,31 @@ const PLAYER = {
  *   x = LERP(X_FAR, X_NEAR, intensity) + hit pressure - skill credit
  * ------------------------------------------------------------------- */
 const AHN = {
-  X_FAR: 46,              // Furthest back (mostly off the left edge) = you're doing great.
-  X_NEAR: 120,            // Closest he creeps during normal play = breathing down your neck.
-  X_MAX: 168,             // Hard clamp. Hit pressure stacks, and without this
+  // NOTE: these are tuned for his 112px-wide frame. He is a big sprite now, so
+  // the numbers are smaller than you would expect -- at X_MAX his shoulder is
+  // already about 15px from her back.
+  X_FAR: 10,              // Furthest back (mostly off the left edge) = you're doing great.
+  X_NEAR: 100,            // Closest he creeps during normal play = breathing down your neck.
+  X_MAX: 150,             // Hard clamp. Hit pressure stacks, and without this
                           // he would walk straight through the girl and out the
                           // right of the screen after a few hits.
-  X_LUNGE: 200,           // Where he snaps to during the game-over catch.
-  FOLLOW_LERP: 0.9,       // How fast he eases to his target X (per second, 0..1-ish).
+  X_LUNGE: 190,           // Where he snaps to during the game-over catch.
+  FOLLOW_LERP: 0.55,      // How fast he eases to his target X (per second, 0..1-ish).
+                          // Lower = he lumbers, and gaining/losing ground on him
+                          // reads as a slow drift instead of a snap.
   HIT_PUSH: 46,           // Px closer per hit taken. Persistent pressure.
   NEARMISS_CREDIT: 14,    // Px pushed back per near miss (rewards risky play).
   CREDIT_MAX: 70,         // Cap on accumulated near-miss credit.
-  CREDIT_DECAY: 6,        // Px/second the credit bleeds away.
+  CREDIT_DECAY: 4.5,      // Px/second the credit bleeds away.
   Y_OFFSET: 2,            // Fine-tune his feet against the ground line.
-  WARN_X: 148,            // Screen X past which the "AHN IS CLOSE!" warning shows.
+  WARN_X: 128,            // Screen X past which the "AHN IS CLOSE!" warning shows.
 
   // Comedic trip gag: only fires when the player has genuinely pulled ahead.
-  TRIP_WHEN_X_BELOW: 40,  // He must be at least this far back to trip (i.e. you earned it).
+  // Gated on accumulated near-miss credit rather than on his screen X, so the
+  // gag keeps working at every difficulty -- an X threshold only ever lines up
+  // with one point on the ramp (and broke outright when his sprite was resized).
+  // At NEARMISS_CREDIT 14 per near miss, this is "about three clean ones".
+  TRIP_CREDIT_MIN: 22,
   TRIP_MIN_DELAY: 3200,   // Random cooldown window between gags (ms).
   TRIP_MAX_DELAY: 7000,
 };
@@ -161,13 +170,13 @@ const OBSTACLES = {
     //             jump also clears her, and scores a near miss -- skill option)
     //   'low'  -> drops into a wide floor pose    -> JUMP over
     highChance: 0.5,
-    highY: 38,            // Px the HIGH idol's feet float above the ground.
+    highY: 23,            // Px the HIGH idol's feet float above the ground.
                           // TUNED, DO NOT EYEBALL: it puts her hitbox bottom at
-                          // GROUND_Y-62, inside the window between a standing
-                          // player's head (GROUND_Y-80) and a ducking player's
-                          // head (GROUND_Y-42) -- ~18px of margin either way.
-                          // Re-derive if you touch BODY_STAND, BODY_DUCK or the
-                          // idol frame height.
+                          // GROUND_Y-47, inside the window between a standing
+                          // player's head (GROUND_Y-60) and a ducking player's
+                          // head (GROUND_Y-34) -- ~13px of margin either way.
+                          // Re-derive if you touch BODY_STAND, BODY_DUCK,
+                          // ASSETS.girl.sourceScale or the idol frame height.
     bodyHigh: { w: 60, h: 60, ox: 10, oy: 12 },
     bodyLow:  { w: 52, h: 60, ox: 14, oy: 36 },
     // Choreography: side-step -> pose -> settle into blocking position.
@@ -182,7 +191,8 @@ const OBSTACLES = {
  * ------------------------------------------------------------------- */
 const SCORE = {
   PER_PIXEL: 0.05,        // Base score per world px travelled.
-  NEAR_MISS_MARGIN: 26,   // Px gap between hitboxes that still counts as "near".
+  NEAR_MISS_MARGIN: 18,   // Px gap between hitboxes that still counts as "near".
+                          // Scaled with the player: ~30% of her height.
   NEAR_MISS_BONUS: 30,    // Flat score pop per near miss.
   MULT_STEP: 0.25,        // Multiplier gained per near miss.
   MULT_MAX: 4.0,
@@ -224,6 +234,12 @@ const ASSETS = {
     key: 'girl',
     path: null,           // set this instead to use a single packed spritesheet
     frameWidth: 96, frameHeight: 128, frameCount: 9, artScale: 2,
+    // She is drawn at 70% of her source size so AHN reads as a giant next to
+    // her (~59px tall against his ~148px). Smoothly downscaled first, then
+    // upscaled 2x by artScale, so she stays on the same pixel grid as him --
+    // see `resampled` in art.js. The frame keeps its size; she just occupies
+    // less of it, which is why the body boxes below are re-measured.
+    sourceScale: 0.7,
     sources: {
       run: [
         'assets/sprites/16-bit_pixel_art_character_sprite/Idle/animations/Running/south-east/frame_000.png',
@@ -259,11 +275,13 @@ const ASSETS = {
   ahn: {
     key: 'ahn',
     path: 'assets/sprites/ahn/ahn.png',
-    frameWidth: 88, frameHeight: 112, frameCount: 9,   // sheet is generated at 2x
+    frameWidth: 112, frameHeight: 152, frameCount: 9,  // sheet is generated at 2x
     anims: {
-      'ahn-run':   { frames: [0, 1, 2, 3], frameRate: 10, repeat: -1 },
-      'ahn-trip':  { frames: [4, 5, 6],    frameRate: 7,  repeat: 0 },
-      'ahn-catch': { frames: [7, 8],       frameRate: 9,  repeat: -1 },
+      // Slower cadence than the girl on purpose: he is half again her size, and
+      // a big sprite with a fast leg cycle reads as frantic rather than looming.
+      'ahn-run':   { frames: [0, 1, 2, 3], frameRate: 7, repeat: -1 },
+      'ahn-trip':  { frames: [4, 5, 6],    frameRate: 6, repeat: 0 },
+      'ahn-catch': { frames: [7, 8],       frameRate: 8, repeat: -1 },
     },
   },
 
