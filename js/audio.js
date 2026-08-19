@@ -73,22 +73,60 @@ const Sfx = (function () {
     playMusic();
   }
 
-  /** Short pitch-swept blip: covers cues with no sample (yet). */
+  /* ------------------------------------------------------------------
+   * PLACEHOLDER SYNTH
+   * ------------------------------------------------------------------
+   * Stands in for cues with no sample yet. Two voice kinds, stackable via
+   * `layers`, so a landing can be a thud plus a scuff instead of a beep:
+   *   { type, freq, to, dur }              -- pitch-swept oscillator
+   *   { noise: true, dur, cutFrom, cutTo } -- noise through a swept filter
+   * ------------------------------------------------------------------ */
+  let noiseBuffer = null;
+
+  function getNoise(c) {
+    if (noiseBuffer) return noiseBuffer;
+    const len = Math.floor(c.sampleRate * 1.0);
+    noiseBuffer = c.createBuffer(1, len, c.sampleRate);
+    const data = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+    return noiseBuffer;
+  }
+
+  function voice(c, v, vol, when) {
+    const t0 = when + (v.delay || 0);
+    const dur = v.dur || 0.1;
+    const gain = c.createGain();
+    gain.gain.setValueAtTime(vol, t0);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    gain.connect(masterGain);
+
+    if (v.noise) {
+      const src = c.createBufferSource();
+      src.buffer = getNoise(c);
+      const filter = c.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(v.cutFrom || 2000, t0);
+      filter.frequency.exponentialRampToValueAtTime(Math.max(40, v.cutTo || 300), t0 + dur);
+      src.connect(filter).connect(gain);
+      src.start(t0);
+      src.stop(t0 + dur + 0.02);
+    } else {
+      const osc = c.createOscillator();
+      osc.type = v.type || 'square';
+      osc.frequency.setValueAtTime(v.freq, t0);
+      osc.frequency.exponentialRampToValueAtTime(Math.max(1, v.to != null ? v.to : v.freq), t0 + dur);
+      osc.connect(gain);
+      osc.start(t0);
+      osc.stop(t0 + dur + 0.02);
+    }
+  }
+
   function blip(def) {
     const c = ctx();
     if (!c || !def.synth) return;
-    const s = def.synth;
-    const osc = c.createOscillator();
-    const gain = c.createGain();
     const vol = (def.volume != null ? def.volume : 1) * 0.35;
-    osc.type = s.type || 'square';
-    osc.frequency.setValueAtTime(s.freq, c.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(Math.max(1, s.to), c.currentTime + s.dur);
-    gain.gain.setValueAtTime(vol, c.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + s.dur);
-    osc.connect(gain).connect(masterGain);
-    osc.start();
-    osc.stop(c.currentTime + s.dur + 0.02);
+    const layers = def.synth.layers || [def.synth];
+    layers.forEach((v) => voice(c, v, vol, c.currentTime));
   }
 
   function play(key) {

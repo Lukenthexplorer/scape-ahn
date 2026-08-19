@@ -67,6 +67,10 @@ class BootScene extends Phaser.Scene {
     });
 
     Sfx.init();          // starts background fetch/decode; never blocks
+
+    // Author-time safety net: warns in the console about any obstacle pattern
+    // that cannot actually be cleared (see PATTERNS in config.js).
+    ObstacleSpawner.validatePatterns();
     this.scene.start(DEV.has('skip') ? 'Game' : 'Title');
   }
 }

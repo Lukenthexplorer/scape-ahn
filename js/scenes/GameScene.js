@@ -1,12 +1,12 @@
 /* =====================================================================
  * SCAPE AHN!  --  GameScene.js
  * ---------------------------------------------------------------------
- * The run itself. Responsibilities:
- *   - build the world (parallax, ground, player, AHN)
- *   - own the difficulty ramp (`intensity`) and world speed
- *   - drive the spawner and recycle off-screen obstacles
- *   - handle input (keyboard + touch)
- *   - scoring, near misses, lives, and the game-over catch sequence
+ * The run itself:
+ *   - the difficulty ramp (`intensity`), which paces everything else
+ *   - the pattern spawner, obstacles, candy pickups
+ *   - scoring, near misses, lives
+ *   - AHN's pressure: vignette, footstep shake, and his one attack
+ *   - weather, the best-run ghost marker, pause, and the game-over catch
  * ===================================================================== */
 
 class GameScene extends Phaser.Scene {
@@ -26,19 +26,23 @@ class GameScene extends Phaser.Scene {
     this.lastNearMissAt = -9999;
     this.lives = PLAYER.LIVES;
     this.hits = 0;
+    this.cleanDistance = 0;   // px since the last hit; feeds AHN's trip gag
     this.running = true;
     this.isOver = false;
 
     this.buildWorld();
     this.buildEntities();
     this.buildHud();
+    this.buildOverlays();
     this.bindInput();
 
-    // Obstacles live in a plain group; each one already carries its own
-    // Arcade body, so the overlap check below works directly on it.
+    // Obstacles and candy live in plain groups; each member carries its own
+    // Arcade body, so the overlap checks below work directly on them.
     this.obstacles = this.add.group();
-    this.spawner = new ObstacleSpawner(this, this.obstacles);
+    this.candies = this.add.group();
+    this.spawner = new ObstacleSpawner(this, this.obstacles, this.candies);
     this.physics.add.overlap(this.player, this.obstacles, this.onObstacleHit, null, this);
+    this.physics.add.overlap(this.player, this.candies, this.onCandyPickup, null, this);
 
     // Short grace period so the player is never hit before they can react.
     this.spawner.distanceSinceSpawn = -260;
@@ -65,6 +69,8 @@ class GameScene extends Phaser.Scene {
       scale: { start: 1, end: 0 }, alpha: { start: 0.8, end: 0 },
       lifespan: { min: 200, max: 420 }, gravityY: 420, emitting: false,
     }).setDepth(12);
+
+    this.buildWeather();
   }
 
   buildEntities() {
@@ -72,12 +78,64 @@ class GameScene extends Phaser.Scene {
     this.physics.add.collider(this.player, this.floor);
 
     this.ahn = new Ahn(this, AHN.X_FAR, GAME.GROUND_Y + AHN.Y_OFFSET);
+
+    // His weight, felt: every footfall thumps the camera, harder the closer
+    // he is. This is the main reason he reads as a 176px monster rather than
+    // a large sprite that happens to be on screen.
+    this.ahn.onFootstep = (prox) => {
+      if (this.isOver || prox < AHN.FOOTSTEP_FROM) return;
+      const t = (prox - AHN.FOOTSTEP_FROM) / (1 - AHN.FOOTSTEP_FROM);
+      this.cameras.main.shake(AHN.FOOTSTEP_SHAKE_MS,
+        Phaser.Math.Linear(AHN.FOOTSTEP_SHAKE_MIN, AHN.FOOTSTEP_SHAKE_MAX, t), true);
+    };
+    this.ahn.onSwipeTelegraph = () => this.onSwipeTelegraph();
+    this.ahn.onSwipeStrike = () => this.onSwipeStrike();
   }
 
   spawnDust(x, y, count) { this.dust.emitParticleAt(x, y - 2, count); }
 
   /* ==================================================================
-   * HUD
+   * WEATHER  --  rain rolls through in bands, purely cosmetic
+   * ================================================================== */
+  buildWeather() {
+    if (!WEATHER.ENABLED) return;
+    this.rainTint = this.add.rectangle(0, 0, GAME.WIDTH, GAME.HEIGHT, 0x3d6ea8, 0)
+      .setOrigin(0, 0).setDepth(80);
+    this.rain = this.add.particles(0, 0, 'drop', {
+      x: { min: -80, max: GAME.WIDTH + 80 },
+      y: -20,
+      speedY: { min: 900, max: 1150 },
+      speedX: { min: -220, max: -140 },     // slanted, matching the run direction
+      lifespan: 900,
+      quantity: 3,
+      frequency: 24,
+      scale: { min: 0.8, max: 1.4 },
+      emitting: false,
+    }).setDepth(81);
+  }
+
+  updateWeather() {
+    if (!WEATHER.ENABLED || !this.rain) return;
+    // Where we are in the dry -> wet -> dry cycle, as a 0..1 wetness.
+    const phase = this.distance % WEATHER.PERIOD_PX;
+    let wet = 0;
+    if (phase < WEATHER.RAIN_PX) {
+      const inRamp = Math.min(1, phase / WEATHER.FADE_PX);
+      const outRamp = Math.min(1, (WEATHER.RAIN_PX - phase) / WEATHER.FADE_PX);
+      wet = Math.min(inRamp, outRamp);
+    }
+    this.wetness = wet;
+    this.rainTint.setAlpha(wet * WEATHER.TINT_ALPHA);
+    if (wet > 0.02) {
+      this.rain.emitting = true;
+      this.rain.frequency = Phaser.Math.Linear(90, 12, wet);
+    } else {
+      this.rain.emitting = false;
+    }
+  }
+
+  /* ==================================================================
+   * HUD + OVERLAYS
    * ================================================================== */
   buildHud() {
     const F = 'Trebuchet MS, sans-serif';
@@ -99,10 +157,57 @@ class GameScene extends Phaser.Scene {
       }
     }
 
-    this.warnShown = false;
-    this.warnText = this.add.text(GAME.WIDTH / 2, 34, '', {
-      fontFamily: F, fontSize: '24px', color: '#ff5c7a', stroke: '#2b0d1c', strokeThickness: 5,
-    }).setOrigin(0.5, 0).setDepth(100).setAlpha(0);
+    // Reserved for the swipe telegraph. General "he's close" pressure is the
+    // vignette's job -- a permanent warning label is noise.
+    this.warnText = this.add.text(GAME.WIDTH / 2, 40, '', {
+      fontFamily: F, fontSize: '38px', color: '#ffd84a', stroke: '#2b0d1c', strokeThickness: 7,
+    }).setOrigin(0.5, 0).setDepth(101).setAlpha(0);
+  }
+
+  buildOverlays() {
+    const F = 'Trebuchet MS, sans-serif';
+
+    // AHN proximity vignette: the pressure gauge you feel rather than read.
+    this.vignette = this.add.image(0, 0, 'vignette')
+      .setOrigin(0, 0).setDepth(90).setAlpha(0);
+
+    // Pause panel. Built up front and toggled by the scene's own events, so
+    // it is already on screen for the frame the scene stops updating on.
+    this.pausePanel = this.add.container(GAME.WIDTH / 2, GAME.HEIGHT / 2).setDepth(200);
+    this.pausePanel.add(this.add.rectangle(0, 0, GAME.WIDTH, GAME.HEIGHT, 0x0d0710, 0.7));
+    this.pausePanel.add(this.add.text(0, -24, 'PAUSED', {
+      fontFamily: F, fontSize: '52px', color: PAL.uiAccent, stroke: '#2b0d1c', strokeThickness: 8,
+    }).setOrigin(0.5));
+    this.pausePanel.add(this.add.text(0, 30, 'P to resume    M to mute', {
+      fontFamily: F, fontSize: '20px', color: '#d9c3e8',
+    }).setOrigin(0.5));
+    this.pausePanel.setVisible(false);
+    this.events.on(Phaser.Scenes.Events.PAUSE, () => this.pausePanel.setVisible(true));
+    this.events.on(Phaser.Scenes.Events.RESUME, () => this.pausePanel.setVisible(false));
+
+    this.buildTouchHint();
+  }
+
+  /** First-run touch hint. Swipe-down-to-duck is not discoverable otherwise. */
+  buildTouchHint() {
+    if (!this.sys.game.device.input.touch) return;
+    if (localStorage.getItem('scapeahn.seenTouch')) return;
+    localStorage.setItem('scapeahn.seenTouch', '1');
+
+    const F = 'Trebuchet MS, sans-serif';
+    const hint = this.add.container(0, 0).setDepth(150);
+    hint.add(this.add.text(GAME.WIDTH * 0.30, GAME.HEIGHT * 0.34, 'TAP\nto jump', {
+      fontFamily: F, fontSize: '26px', color: '#ffffff', align: 'center',
+      backgroundColor: '#00000099', padding: { x: 14, y: 10 },
+    }).setOrigin(0.5));
+    hint.add(this.add.text(GAME.WIDTH * 0.70, GAME.HEIGHT * 0.34, 'SWIPE DOWN\nto duck', {
+      fontFamily: F, fontSize: '26px', color: '#ffffff', align: 'center',
+      backgroundColor: '#00000099', padding: { x: 14, y: 10 },
+    }).setOrigin(0.5));
+    this.tweens.add({
+      targets: hint, alpha: 0, delay: 3600, duration: 700,
+      onComplete: () => hint.destroy(),
+    });
   }
 
   refreshHearts() {
@@ -134,7 +239,7 @@ class GameScene extends Phaser.Scene {
      * more than gesture purity in a runner). If the finger then drags down
      * past the swipe threshold *within* SWIPE_MAX_MS, we reinterpret the
      * gesture as a duck and cancel the jump that just started. Holding the
-     * finger down keeps the duck; lifting it stands back up.
+     * finger down keeps the duck; lifting it stands her back up.
      * ------------------------------------------------------------------ */
     this.touch = { downAt: 0, downY: 0, swiped: false, active: false };
 
@@ -202,7 +307,7 @@ class GameScene extends Phaser.Scene {
        * intensity is normalized distance, shaped by RAMP_CURVE:
        *   curve < 1 -> ramps hard early, then eases (current default)
        *   curve > 1 -> slow burn that spikes late
-       * Speed, spawn gaps, obstacle weights and AHN's creep all read it,
+       * Speed, spawn gaps, pattern unlocks and AHN's creep all read it,
        * so this one line paces the whole game.
        * ------------------------------------------------------------- */
       const raw = Phaser.Math.Clamp(this.distance / DIFFICULTY.RAMP_DISTANCE, 0, 1);
@@ -211,6 +316,7 @@ class GameScene extends Phaser.Scene {
 
       const dDist = this.speed * dt;
       this.distance += dDist;
+      this.cleanDistance += dDist;
 
       /* --- 2. SCROLL THE WORLD -------------------------------------- */
       this.backdrop.scroll(dDist);
@@ -218,12 +324,18 @@ class GameScene extends Phaser.Scene {
       /* --- 3. SPAWN + MOVE OBSTACLES -------------------------------- */
       this.spawner.update(dDist, this.intensity, this.speed);
 
-      // slice(): destroy() mutates the group's child list, and mutating it
+      // slice(): the list is mutated as things are recycled, and mutating it
       // mid-iteration silently skips the next obstacle.
       this.obstacles.getChildren().slice().forEach((o) => {
+        if (!o.active) return;
         o.tickMotion(this.speed, dt);
         if (o.trackNearMiss(this.player)) this.awardNearMiss(o);
-        if (o.x < -140) o.destroy();          // recycle off the left edge
+        if (o.x < -160) o.deactivate();       // back to the pool
+      });
+      this.candies.getChildren().slice().forEach((c) => {
+        if (!c.active) return;
+        c.tickMotion(this.speed, dt);
+        if (c.x < -160) c.deactivate();
       });
 
       /* --- 4. SCORE + MULTIPLIER DECAY ------------------------------ */
@@ -239,8 +351,11 @@ class GameScene extends Phaser.Scene {
 
       this.updateDuck();
       this.player.tick();
-      this.ahn.tick(dt, this.intensity, this.hits);
+      this.ahn.tick(dt, this.intensity, this.hits, this.cleanDistance);
 
+      /* --- 6. DRESSING ---------------------------------------------- */
+      this.updateWeather();
+      this.updateGhost(dDist);
       this.updateHud();
     } else if (this.player) {
       this.player.tick();
@@ -256,20 +371,60 @@ class GameScene extends Phaser.Scene {
       this.multText.setAlpha(0);
     }
 
-    // "AHN IS CLOSE!" nudge once he is breathing down her neck. Tracked with a
-    // flag, not with alpha: testing alpha restarts the fade every frame while
-    // it is still fading, stacking a new tween per frame.
-    const close = this.ahn.x > AHN.WARN_X;
-    if (close !== this.warnShown) {
-      this.warnShown = close;
-      this.warnText.setText('AHN IS CLOSE!');
-      this.tweens.killTweensOf(this.warnText);
-      this.tweens.add({ targets: this.warnText, alpha: close ? 1 : 0, duration: close ? 200 : 300 });
-    }
+    // Vignette tracks AHN's proximity continuously -- no state, no tweens.
+    const prox = this.ahn.proximity();
+    const v = Phaser.Math.Clamp((prox - AHN.VIGNETTE_FROM) / (1 - AHN.VIGNETTE_FROM), 0, 1);
+    this.vignette.setAlpha(v * v * AHN.VIGNETTE_MAX_ALPHA);   // squared: stays subtle until it matters
   }
 
   /* ==================================================================
-   * NEAR MISS  --  the risk/reward hook
+   * BEST-RUN GHOST  --  a line on the road where your best run died
+   * ================================================================== */
+  updateGhost(dDist) {
+    if (!GHOST.ENABLED) return;
+    if (this.ghostDone) return;
+
+    if (!this.ghost) {
+      const best = Number(localStorage.getItem(GHOST.BEST_DIST_KEY) || 0);
+      if (best < GHOST.MIN_DIST) { this.ghostDone = true; return; }
+      const ahead = best - this.distance;
+      if (ahead > GAME.WIDTH || ahead < 0) return;     // not in view yet
+      this.ghost = this.add.container(PLAYER.X + ahead, 0).setDepth(14);
+      this.ghost.add(this.add.rectangle(0, GAME.GROUND_Y, 4, 150, 0xffd84a, 0.5).setOrigin(0.5, 1));
+      this.ghost.add(this.add.text(0, GAME.GROUND_Y - 158, 'BEST', {
+        fontFamily: 'Trebuchet MS, sans-serif', fontSize: '18px', color: PAL.uiWarn,
+        stroke: '#2b0d1c', strokeThickness: 4,
+      }).setOrigin(0.5));
+      return;
+    }
+
+    this.ghost.x -= dDist;
+    if (this.ghost.x <= PLAYER.X) {
+      this.ghostDone = true;
+      this.flourish('NEW BEST!', PAL.uiWarn);
+      Sfx.play('nearmiss');
+      this.tweens.add({
+        targets: this.ghost, alpha: 0, duration: 500,
+        onComplete: () => this.ghost.destroy(),
+      });
+    }
+  }
+
+  /** Big centred callout used for milestones. */
+  flourish(text, color) {
+    const t = this.add.text(GAME.WIDTH / 2, GAME.HEIGHT * 0.34, text, {
+      fontFamily: 'Trebuchet MS, sans-serif', fontSize: '44px', color: color,
+      stroke: '#2b0d1c', strokeThickness: 8,
+    }).setOrigin(0.5).setDepth(120).setScale(0.7);
+    this.tweens.add({ targets: t, scale: 1, duration: 220, ease: 'Back.easeOut' });
+    this.tweens.add({
+      targets: t, alpha: 0, y: t.y - 40, delay: 700, duration: 500,
+      onComplete: () => t.destroy(),
+    });
+  }
+
+  /* ==================================================================
+   * NEAR MISS + CANDY  --  the risk/reward hooks
    * ================================================================== */
   awardNearMiss(obstacle) {
     // Bonus is scored at the multiplier you HAD when you took the risk; the
@@ -280,11 +435,26 @@ class GameScene extends Phaser.Scene {
     this.lastNearMissAt = this.time.now;
     this.ahn.addCredit(AHN.NEARMISS_CREDIT);   // slick play literally pushes AHN back
     Sfx.play('nearmiss');
+    this.popup('NEAR MISS +' + bonus, PAL.uiWarn);
+  }
 
-    const pop = this.add.text(this.player.x + 30, this.player.y - 70, 'NEAR MISS +' + bonus, {
-        fontFamily: 'Trebuchet MS, sans-serif', fontSize: '18px', color: PAL.uiWarn,
-        stroke: '#2b0d1c', strokeThickness: 4,
-      }).setOrigin(0.5).setDepth(100);
+  onCandyPickup(player, candy) {
+    if (!candy.active || candy.collected) return;
+    candy.collected = true;
+    const bonus = Math.round(CANDY.SCORE * this.multiplier);
+    this.score += bonus;
+    this.ahn.addCredit(CANDY.AHN_PUSHBACK);
+    Sfx.play('candy');
+    this.spawnDust(candy.x, candy.y + 20, 10);
+    this.popup('+' + bonus, '#ff8ab4');
+    candy.deactivate();
+  }
+
+  popup(text, color) {
+    const pop = this.add.text(this.player.x + 30, this.player.y - 74, text, {
+      fontFamily: 'Trebuchet MS, sans-serif', fontSize: '18px', color: color,
+      stroke: '#2b0d1c', strokeThickness: 4,
+    }).setOrigin(0.5).setDepth(100);
     this.tweens.add({
       targets: pop, y: pop.y - 42, alpha: 0, duration: 700, ease: 'Quad.easeOut',
       onComplete: () => pop.destroy(),
@@ -292,26 +462,60 @@ class GameScene extends Phaser.Scene {
   }
 
   /* ==================================================================
+   * AHN'S SWIPE
+   * ================================================================== */
+  onSwipeTelegraph() {
+    if (this.isOver) return;
+    Sfx.play('swipe');
+    this.warnText.setText('JUMP!');
+    this.tweens.killTweensOf(this.warnText);
+    this.warnText.setAlpha(1).setScale(1);
+    this.tweens.add({ targets: this.warnText, scale: 1.15, duration: 160, yoyo: true, repeat: 2 });
+  }
+
+  onSwipeStrike() {
+    this.tweens.add({ targets: this.warnText, alpha: 0, duration: 200 });
+    if (this.isOver || this.player.dead) return;
+
+    // Airborne dodges it. On the ground -- ducking included -- it connects.
+    if (this.player.onGround) {
+      this.applyHit(this.player.x, this.player.y - 40);
+    } else {
+      this.score += SCORE.NEAR_MISS_BONUS * 2;
+      this.multiplier = Math.min(SCORE.MULT_MAX, this.multiplier + SCORE.MULT_STEP * 2);
+      this.lastNearMissAt = this.time.now;
+      this.popup('DODGED!', PAL.uiWarn);
+      Sfx.play('nearmiss');
+    }
+  }
+
+  /* ==================================================================
    * DAMAGE
    * ================================================================== */
   onObstacleHit(player, obstacle) {
-    if (this.isOver || obstacle.hitAlready) return;
+    if (this.isOver || obstacle.hitAlready || !obstacle.active) return;
 
     // Mark it resolved BEFORE the mercy check. Otherwise an obstacle you walk
     // straight through while invulnerable stays unresolved and later scores a
     // near miss for a gap of zero -- free points for being hit.
     obstacle.hitAlready = true;
-    if (!player.takeHit()) return;             // mercy invulnerability swallowed it
+    this.applyHit(obstacle.x, obstacle.y);
+  }
+
+  /** One place where a hit is resolved, whatever caused it. */
+  applyHit(fxX, fxY) {
+    if (!this.player.takeHit()) return;        // mercy invulnerability swallowed it
 
     this.hits += 1;
     this.lives -= 1;
     this.multiplier = 1;                        // combo wiped
+    this.cleanDistance = 0;                     // clean-run streak broken
     this.refreshHearts();
 
     Sfx.play('hit');
     this.cameras.main.shake(180, 0.012);
     this.cameras.main.flash(120, 255, 80, 110);
-    this.spawnDust(obstacle.x, obstacle.y, 10);
+    this.spawnDust(fxX, fxY, 10);
 
     // AHN gains ground immediately -- the hit is felt, not just counted.
     this.ahn.credit = 0;
@@ -334,10 +538,13 @@ class GameScene extends Phaser.Scene {
 
     // Freeze the world; the catch sequence is the only thing still moving.
     this.obstacles.getChildren().forEach((o) => {
+      if (!o.active) return;
       o.body.setVelocityX(0);
       this.tweens.killTweensOf(o);
     });
+    this.candies.getChildren().forEach((c) => { if (c.active) c.body.setVelocityX(0); });
     this.warnText.setAlpha(0);
+    if (this.rain) this.rain.emitting = false;
 
     this.cameras.main.shake(260, 0.008);
     this.ahn.startCatch(AHN.X_LUNGE, () => {
@@ -348,7 +555,11 @@ class GameScene extends Phaser.Scene {
       const finalScore = Math.floor(this.score);
       const best = Number(localStorage.getItem(SCORE.BEST_KEY) || 0);
       const isNewBest = finalScore > best;
-      if (isNewBest) localStorage.setItem(SCORE.BEST_KEY, String(finalScore));
+      if (isNewBest) {
+        localStorage.setItem(SCORE.BEST_KEY, String(finalScore));
+        // Distance is stored separately: it is what the ghost marker chases.
+        localStorage.setItem(GHOST.BEST_DIST_KEY, String(Math.floor(this.distance)));
+      }
 
       this.time.delayedCall(420, () => {
         this.scene.launch('GameOver', {

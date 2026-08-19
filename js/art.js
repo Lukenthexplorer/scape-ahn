@@ -315,6 +315,23 @@ const PlaceholderArt = (function () {
 
   function drawDust(c) { r(c, 0, 0, 6, 6, '#e8d5f2'); }
 
+  /* CANDY -- 28x28 design, a lollipop. Frame 1 rotates the swirl a little. */
+  function drawCandy(c, f) {
+    const swirl = f === 0 ? '#ff5c9e' : '#ff8ab4';
+    r(c, 13, 16, 2, 12, '#efe3d8');                  // stick
+    circle(c, 14, 11, 9, '#fff2f7');                 // candy disc
+    circle(c, 14, 11, 7, swirl);
+    circle(c, 14, 11, 4, '#fff2f7');
+    circle(c, 14, 11, 2, swirl);
+    r(c, 10, 5, 3, 2, 'rgba(255,255,255,0.8)');      // highlight
+  }
+
+  /* RAINDROP -- 2x14, drawn at final size (no artScale). */
+  function drawDrop(c) {
+    r(c, 0, 0, 2, 14, 'rgba(190,214,255,0.55)');
+    r(c, 0, 0, 2, 4, 'rgba(226,238,255,0.85)');
+  }
+
   function drawHeart(c, f) {
     const fill = f === 0 ? '#ff5c7a' : '#4a3355';
     r(c, 2, 2, 6, 6, fill); r(c, 12, 2, 6, 6, fill);
@@ -324,8 +341,29 @@ const PlaceholderArt = (function () {
 
   const DRAWERS = {
     girl: drawGirl, ahn: drawAhn, kimchi: drawKimchi, spike: drawSpike,
-    idol: drawIdol, dust: drawDust, heart: drawHeart,
+    idol: drawIdol, candy: drawCandy, dust: drawDust, drop: drawDrop,
+    heart: drawHeart,
   };
+
+  /**
+   * Radial vignette used for AHN's proximity pressure. Built as its own
+   * texture rather than a tinted rectangle so the darkening falls off
+   * smoothly from the edges instead of flatly covering the street.
+   */
+  function buildVignette(scene, key, w, h) {
+    if (scene.textures.exists(key)) scene.textures.remove(key);
+    const tex = scene.textures.createCanvas(key, w, h);
+    const ctx = tex.getContext();
+    const g = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.30,
+                                       w / 2, h / 2, Math.max(w, h) * 0.62);
+    g.addColorStop(0, 'rgba(120,0,20,0)');
+    g.addColorStop(0.55, 'rgba(120,0,20,0.35)');
+    g.addColorStop(1, 'rgba(90,0,14,0.95)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+    tex.refresh();
+    return tex;
+  }
 
   /* ==================================================================
    * PUBLIC
@@ -348,6 +386,7 @@ const PlaceholderArt = (function () {
 
   /** Build every texture that is not a plain loaded spritesheet. */
   function buildAll(scene) {
+    buildVignette(scene, 'vignette', GAME.WIDTH, GAME.HEIGHT);
     Object.keys(ASSETS).forEach((name) => {
       const a = ASSETS[name];
       if (a.path) return;                       // loaded by BootScene instead
@@ -363,5 +402,5 @@ const PlaceholderArt = (function () {
     });
   }
 
-  return { buildAll, sourceFiles, strip };
+  return { buildAll, sourceFiles, strip, buildVignette };
 })();

@@ -43,7 +43,10 @@ const BACKGROUND = {
 const PLAYER = {
   X: 250,                 // Fixed screen X. World scrolls past her.
   LIVES: 3,               // <-- SET TO 1 FOR TIGHT, ONE-HIT-DEATH TENSION.
-  JUMP_VELOCITY: -1090,   // Initial upward impulse.
+  // Apex works out to ~161px, about 2.7x her height. Everything that depends
+  // on the jump -- spawn gaps, cluster spacing, pattern spacing -- is derived
+  // from the resulting arc, so changing this re-paces the level automatically.
+  JUMP_VELOCITY: -950,    // Initial upward impulse.
   JUMP_CUT: 0.42,         // Release jump early -> velocity *= this (variable jump height).
   COYOTE_MS: 90,          // Grace period to still jump just after leaving the ground.
   JUMP_BUFFER_MS: 130,    // Press jump slightly before landing and it still fires.
@@ -89,12 +92,38 @@ const AHN = {
   Y_OFFSET: 2,            // Fine-tune his feet against the ground line.
   WARN_X: 128,            // Screen X past which the "AHN IS CLOSE!" warning shows.
 
+  /* Weight. He is a 176px giant, so his footfalls shake the camera. The shake
+   * scales with how close he is, which turns his proximity into something you
+   * feel rather than something you have to look at. */
+  FOOTSTEP_FRAMES: [0, 2],   // frames of 'ahn-run' where a foot lands
+  FOOTSTEP_SHAKE_MIN: 0.0016,
+  FOOTSTEP_SHAKE_MAX: 0.0075,
+  FOOTSTEP_SHAKE_MS: 110,
+  FOOTSTEP_FROM: 0.30,       // proximity (0..1) below which he makes no impact
+
+  /* Red vignette that closes in as he does. Same 0..1 proximity. */
+  VIGNETTE_FROM: 0.25,
+  VIGNETTE_MAX_ALPHA: 0.72,
+
+  /* THE SWIPE: if he is pinned at X_MAX for this long he takes a telegraphed
+   * grab at her. Jump it and he misses. This is the one way he can actually
+   * hurt you -- set SWIPE_ENABLED false to go back to him being pure pressure. */
+  SWIPE_ENABLED: true,
+  SWIPE_CHARGE_MS: 2200,     // time at max proximity before he commits
+  SWIPE_TELEGRAPH_MS: 780,   // windup you get to react to
+  SWIPE_RECOVER_MS: 900,     // he falls back and cannot swipe again immediately
+  SWIPE_PUSHBACK: 34,        // px he loses after swinging, hit or miss
+
   // Comedic trip gag: only fires when the player has genuinely pulled ahead.
   // Gated on accumulated near-miss credit rather than on his screen X, so the
   // gag keeps working at every difficulty -- an X threshold only ever lines up
   // with one point on the ramp (and broke outright when his sprite was resized).
   // At NEARMISS_CREDIT 14 per near miss, this is "about three clean ones".
   TRIP_CREDIT_MIN: 22,
+  // ...or after a long clean stretch, so the gag is not gated purely on a
+  // stat most players never notice. Measured runs showed zero trips in 50s of
+  // good play before this second trigger existed.
+  TRIP_CLEAN_PX: 5200,
   TRIP_MIN_DELAY: 3200,   // Random cooldown window between gags (ms).
   TRIP_MAX_DELAY: 7000,
 };
@@ -139,6 +168,12 @@ const DIFFICULTY = {
   CLUSTER_GAP_MIN: 140,
   CLUSTER_GAP_MAX: 300,
   CLUSTER_MIN_INTENSITY: 0.25, // No clusters before this much of the ramp.
+
+  // Pattern-authoring limits, in jump arcs. See PATTERNS below: a gap must be
+  // small enough to clear in one jump, or big enough to land and jump again.
+  // Anything between the two is the unfair zone -- she lands on the obstacle.
+  PATTERN_DOUBLE_MAX_ARC: 0.55,
+  PATTERN_REJUMP_MIN_ARC: 1.00,
 };
 
 /* ---------------------------------------------------------------------
@@ -183,7 +218,108 @@ const OBSTACLES = {
     stepSpeed: 130,       // Extra px/s of lateral drift during the side-step.
     stepMs: 520,          // Duration of the side-step.
     poseMs: 340,          // Pose beat before locking in.
+    // The routine is compressed to finish by this screen X, so the pose is a
+    // telegraph rather than a surprise. Fitting it to "before she arrives"
+    // instead left only ~0.16s of reading time at top speed.
+    POSE_BY_X: 620,
   },
+};
+
+/* ---------------------------------------------------------------------
+ * 5b. OBSTACLE PATTERNS  --  the level's vocabulary
+ * ---------------------------------------------------------------------
+ * The spawner emits PATTERNS, not lone obstacles. Random single obstacles
+ * give an endless runner no rhythm; hand-authored little phrases do, and
+ * players start to recognise and anticipate them.
+ *
+ * `gap` is measured in JUMP ARCS, not pixels. One arc is the ground distance
+ * a full jump covers at the current speed, so a pattern authored once stays
+ * playable at every speed the game ever reaches.
+ *
+ * THE FAIRNESS RULE, enforced by validatePatterns() at boot:
+ *   - two GROUND obstacles less than ~0.55 arcs apart must be clearable in a
+ *     single jump -> that is a "double", and it is fine.
+ *   - anything else must be at least 1.0 arcs apart, so she can land, and
+ *     jump again.
+ *   - a duck (idol-high) next to anything needs 1.0+ arcs either side: you
+ *     cannot duck and jump at the same time.
+ * Author freely; the validator will complain in the console if a pattern is
+ * unfair, rather than letting you ship an impossible spawn.
+ * ------------------------------------------------------------------- */
+const PATTERNS = [
+  // --- bread and butter, available from the first second ----------------
+  { name: 'jar',            minI: 0.00, weight: 10, items: [{ type: 'kimchi' }] },
+  { name: 'spikes',         minI: 0.00, weight: 10, items: [{ type: 'spike' }] },
+
+  // --- idols phase in once the player has the basics --------------------
+  { name: 'idol',           minI: 0.10, weight: 7,  items: [{ type: 'idol' }] },
+
+  // --- doubles: one jump clears both -----------------------------------
+  { name: 'double-jar',     minI: 0.18, weight: 5,  items: [{ type: 'kimchi' }, { type: 'kimchi', gap: 0.42 }] },
+  { name: 'spike-jar',      minI: 0.22, weight: 5,  items: [{ type: 'spike' },  { type: 'kimchi', gap: 0.45 }] },
+  { name: 'jar-spike',      minI: 0.30, weight: 4,  items: [{ type: 'kimchi' }, { type: 'spike',  gap: 0.44 }] },
+
+  // --- land-and-jump-again rhythms --------------------------------------
+  { name: 'two-beat',       minI: 0.25, weight: 6,  items: [{ type: 'spike' },  { type: 'spike',  gap: 1.15 }] },
+  { name: 'three-beat',     minI: 0.45, weight: 4,  items: [{ type: 'kimchi' }, { type: 'spike',  gap: 1.12 },
+                                                            { type: 'kimchi', gap: 1.12 }] },
+
+  // --- mixed inputs: jump, then duck, then jump -------------------------
+  { name: 'jump-duck',      minI: 0.38, weight: 4,  items: [{ type: 'spike' },  { type: 'idol-high', gap: 1.30 }] },
+  { name: 'duck-jump',      minI: 0.45, weight: 4,  items: [{ type: 'idol-high' }, { type: 'kimchi', gap: 1.30 }] },
+  { name: 'duck-double',    minI: 0.62, weight: 3,  items: [{ type: 'idol-high' }, { type: 'spike', gap: 1.35 },
+                                                            { type: 'kimchi', gap: 0.44 }] },
+
+  // --- late-game showpieces ---------------------------------------------
+  { name: 'gauntlet',       minI: 0.70, weight: 3,  items: [{ type: 'spike' },  { type: 'kimchi', gap: 0.45 },
+                                                            { type: 'spike',  gap: 1.25 }] },
+  { name: 'idol-sandwich',  minI: 0.78, weight: 2,  items: [{ type: 'idol-low' }, { type: 'idol-high', gap: 1.35 },
+                                                            { type: 'kimchi', gap: 1.30 }] },
+];
+
+/* ---------------------------------------------------------------------
+ * 5c. CANDY PICKUPS
+ * ---------------------------------------------------------------------
+ * Optional reward, deliberately placed where a jump already takes you: at
+ * the apex of the arc over an obstacle. Collecting one shoves AHN back, so
+ * greed and safety point the same way -- but only if you jump well.
+ * ------------------------------------------------------------------- */
+const CANDY = {
+  ENABLED: true,
+  CHANCE: 0.42,           // per pattern, once the ramp has started
+  MIN_INTENSITY: 0.08,
+  HEIGHT: 120,            // px above the ground (inside a ~161px jump apex)
+  SCORE: 90,
+  AHN_PUSHBACK: 20,       // px of skill credit, same currency as a near miss
+  BODY: { w: 40, h: 40, ox: 8, oy: 8 },
+};
+
+/* ---------------------------------------------------------------------
+ * 5d. WEATHER
+ * ---------------------------------------------------------------------
+ * Rain rolls through in bands so the street is not visually static over a
+ * long run. Cosmetic only -- it never changes physics or visibility enough
+ * to affect play.
+ * ------------------------------------------------------------------- */
+const WEATHER = {
+  ENABLED: true,
+  PERIOD_PX: 26000,       // one full dry -> rain -> dry cycle
+  RAIN_PX: 11000,         // how much of that cycle is wet
+  FADE_PX: 2200,          // ramp in/out so it never snaps on
+  DROPS: 190,
+  TINT_ALPHA: 0.16,
+};
+
+/* ---------------------------------------------------------------------
+ * 5e. BEST-RUN GHOST
+ * ---------------------------------------------------------------------
+ * A marker parked at the exact distance your best run died. Chasing a line
+ * you can see beats chasing a number in a menu.
+ * ------------------------------------------------------------------- */
+const GHOST = {
+  ENABLED: true,
+  BEST_DIST_KEY: 'scapeahn.bestDist',
+  MIN_DIST: 1200,         // do not bother marking a trivially short best
 };
 
 /* ---------------------------------------------------------------------
@@ -275,7 +411,7 @@ const ASSETS = {
   ahn: {
     key: 'ahn',
     path: 'assets/sprites/ahn/ahn.png',
-    frameWidth: 112, frameHeight: 152, frameCount: 9,  // sheet is generated at 2x
+    frameWidth: 112, frameHeight: 176, frameCount: 9,  // body on a 2px grid, photo head at full res
     anims: {
       // Slower cadence than the girl on purpose: he is half again her size, and
       // a big sprite with a fast leg cycle reads as frantic rather than looming.
@@ -312,8 +448,18 @@ const ASSETS = {
     },
   },
 
+  // Candy pickup (placeholder lollipop).
+  candy: {
+    key: 'candy',
+    path: null,
+    frameWidth: 56, frameHeight: 56, frameCount: 2, artScale: 2,
+    outline: '#150c1c',
+    anims: { 'candy-spin': { frames: [0, 1], frameRate: 5, repeat: -1 } },
+  },
+
   // Small UI / FX textures (placeholders).
   dust:  { key: 'dust',  path: null, frameWidth: 12, frameHeight: 12, frameCount: 1, artScale: 2, anims: {} },
+  drop:  { key: 'drop',  path: null, frameWidth: 2,  frameHeight: 14, frameCount: 1, anims: {} },
   heart: { key: 'heart', path: null, frameWidth: 40, frameHeight: 36, frameCount: 2, artScale: 2, anims: {} },
 };
 
@@ -341,10 +487,37 @@ const AUDIO = {
     // until you drop a file in and set its `src` the same way.
     jump:     { src: 'assets/audio/jump.mp3', volume: 0.55,
                 synth: { freq: 620, to: 900, dur: 0.11, type: 'square' } },
-    land:     { src: null, volume: 0.25, synth: { freq: 200, to: 120, dur: 0.07, type: 'sine' } },
-    hit:      { src: null, volume: 0.7, synth: { freq: 240, to: 70,  dur: 0.22, type: 'sawtooth' } },
-    nearmiss: { src: null, volume: 0.4, synth: { freq: 980, to: 1400, dur: 0.08, type: 'triangle' } },
-    gameover: { src: null, volume: 0.8, synth: { freq: 420, to: 60,  dur: 0.75, type: 'sawtooth' } },
+    // The `synth` blocks below are placeholder sound design, not just beeps:
+    // `noise` is a filtered noise burst, `layers` stacks voices, `delay`
+    // offsets one inside the cue. Drop a real file into `src` and the whole
+    // synth block is ignored.
+    land:     { src: null, volume: 0.35, synth: { layers: [
+                 { noise: true, dur: 0.09, cutFrom: 1800, cutTo: 300 },
+                 { type: 'sine', freq: 180, to: 90, dur: 0.10 },
+               ] } },
+    hit:      { src: null, volume: 0.75, synth: { layers: [
+                 { type: 'sawtooth', freq: 260, to: 60, dur: 0.26 },
+                 { type: 'square', freq: 130, to: 40, dur: 0.20 },
+                 { noise: true, dur: 0.16, cutFrom: 3000, cutTo: 500 },
+               ] } },
+    nearmiss: { src: null, volume: 0.45, synth: { layers: [
+                 { type: 'triangle', freq: 900, to: 1500, dur: 0.09 },
+                 { type: 'triangle', freq: 1350, to: 2100, dur: 0.07, delay: 0.05 },
+               ] } },
+    candy:    { src: null, volume: 0.5, synth: { layers: [
+                 { type: 'square', freq: 780, to: 800, dur: 0.06 },
+                 { type: 'square', freq: 1180, to: 1200, dur: 0.06, delay: 0.06 },
+                 { type: 'square', freq: 1560, to: 1600, dur: 0.10, delay: 0.12 },
+               ] } },
+    swipe:    { src: null, volume: 0.6, synth: { layers: [
+                 { noise: true, dur: 0.34, cutFrom: 400, cutTo: 4200 },
+                 { type: 'sawtooth', freq: 90, to: 220, dur: 0.34 },
+               ] } },
+    gameover: { src: null, volume: 0.85, synth: { layers: [
+                 { type: 'sawtooth', freq: 420, to: 60, dur: 0.85 },
+                 { type: 'square', freq: 210, to: 40, dur: 0.85, delay: 0.06 },
+                 { noise: true, dur: 0.5, cutFrom: 2200, cutTo: 200, delay: 0.1 },
+               ] } },
     // Add more cues here; `src` may also be an array of fallbacks,
     // e.g. ['assets/audio/hit.ogg', 'assets/audio/hit.mp3'].
   },
